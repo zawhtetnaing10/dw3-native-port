@@ -13,3 +13,22 @@
      if (actor == 0) {
          choosePartnerScript(task, info, own, other);
          if (task->stage <= 0) {
+@@ -200,6 +206,18 @@
+                 }
+             }
+         }
++#ifdef NATIVE
++        /* Only player scripts 9/13 use generated launch markers. Keep the
++           game's existing condition for whether this move changes stage. */
++        if (task->index == 9 || task->index == 13) {
++            task->nativeTechId = id;
++            task->effect = native_visual_get(id, NATIVE_VIS_IMPACT_SPRITE, task->effect);
++            task->sound = native_visual_get(id, NATIVE_VIS_IMPACT_SOUND, task->sound);
++            if (task->stage > 0) {
++                task->stage = native_visual_get(id, NATIVE_VIS_STAGE, task->stage);
++            }
++        }
++#endif
+     } else {
+         chooseEnemyScript(task, info, other);
+     }

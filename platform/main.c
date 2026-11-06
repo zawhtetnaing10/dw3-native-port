@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include "platform.h"
+#include "launch_slots.h"
 #include "../include/native.h"
 
 int psx_main(void);
@@ -245,11 +246,16 @@ int main(int argc, char **argv) {
                                  "and start the game again to read your disc anew.", NULL);
         return 1;
     }
+    int technique_archives_ready = native_prepare_launch_archives();
+    if (argc == 2 && SDL_strcmp(argv[1], "--prepare-techniques") == 0) {
+        return technique_archives_ready ? 0 : 1;
+    }
     native_bladegarurumon_setup(); /* the game's tables as read, then its own */
     native_flamedramon_setup();
     native_snapshot_overlays();
     native_fast_travel_setup(); /* the stages' doors, their variables put back */
     read_ini(0);
+    if (technique_archives_ready) native_visual_load();
     NTSC_MODE = s_fps60; /* the game's own 60 Hz mode, set before it boots */
     if (getenv("DW3_LOG") != NULL) {
         g_log = log_bits(getenv("DW3_LOG"));

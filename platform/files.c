@@ -1,9 +1,9 @@
-/* The game's files: data/files/<fid>.bin from the user's disc
-   (extract.c), read whole and at once. A mod's file in
-   data/mods/<fid>.bin wins. Sectors stay 2048 bytes, the game's unit. */
+/* The game's files: user mods, locally generated technique scripts, then
+   original files extracted from the owner's disc. */
 #include <stdlib.h>
 #include <string.h>
 #include "platform.h"
+#include "launch_slots.h"
 
 #define SECTOR 2048
 #define MAX_FILES 8192 /* the disc's, then the field editor's new ones (3000 on) */
@@ -16,6 +16,10 @@ static FILE *open_file(int fid) {
 
     snprintf(path, sizeof path, "%s/mods/%04d.bin", data_dir(), fid);
     f = fopen(path, "rb");
+    if (f == NULL && native_launch_archives_ready()) {
+        snprintf(path, sizeof path, "%s/generated/%04d.bin", data_dir(), fid);
+        f = fopen(path, "rb");
+    }
     if (f == NULL) {
         snprintf(path, sizeof path, "%s/files/%04d.bin", data_dir(), fid);
         f = fopen(path, "rb");

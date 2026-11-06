@@ -15,6 +15,7 @@ FILES = {
     "dw2003.exe": NATIVE / "build/dw2003.exe",
     "SDL3.dll": NATIVE / "build/SDL3.dll",
     "dw2003.fill": NATIVE / "build/dw2003.fill",
+    "technique_visuals.ini": NATIVE / "build/technique_visuals.ini",
     "dw3launcher.exe": NATIVE / "build/dw3launcher.exe",
     "licenses/PixelDigivolve-License.txt": NATIVE / "launcher/PixelDigivolve-License.txt",
     "README.md": NATIVE / "README.md",

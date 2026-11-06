@@ -1,0 +1,50 @@
+--- a/include/wfightts.h
++++ b/include/wfightts.h
+@@ -20,6 +20,16 @@
+     TASK_HEADER(BattleTestStageList);
+     /* 0x50 */ s32 *result; /* the stage picked, 1-55, or -1 */
+ } BattleTestStageList;
++
++#ifdef NATIVE
++/* Scene Test's named-technique preview list (partner side only). */
++typedef struct BattleTestTechniqueList {
++    TASK_HEADER(BattleTestTechniqueList);
++    s32 *result;
++    s32 cursor;
++    s32 scroll;
++} BattleTestTechniqueList;
++#endif
+ 
+ /* A fighter's motions, in the motion list (WFIGHTTS_motionList) */
+ typedef struct BattleTestMotionList {
+@@ -84,6 +93,9 @@
+     /* 0x60 */ s32 stage; /* 1-55, or -1 */
+     /* 0x64 */ s32 motion;
+     /* 0x68 */ s32 effect;
++#ifdef NATIVE
++    s32 technique;
++#endif
+ } BattleTest;
+ 
+ /* The battle test's children */
+@@ -99,6 +111,9 @@
+     /* 0x20 */ BattleTestMotions *motions;
+     /* 0x24 */ BattleTestEffects *effects;
+     /* 0x28 */ Models *models;
++#ifdef NATIVE
++    BattleTestTechniqueList *techniques;
++#endif
+ } BattleTestChildren;
+ 
+ /* The battle test's data, defined after its code */
+@@ -132,6 +147,10 @@
+ BattleTestStageList *WFIGHTTS_createStageList(s32 *result);
+ BattleTestMotions *WFIGHTTS_createMotionList(s32 *side, s32 *motion);
+ BattleTestEffects *WFIGHTTS_createEffectList(s32 *side, s32 *effect);
++#ifdef NATIVE
++BattleTestTechniqueList *WFIGHTTS_createTechniqueList(s32 *result);
++void WFIGHTTS_techniqueList(BattleTestTechniqueList *task, TextWindow **windows);
++#endif
+ void WFIGHTTS_fighterList(BattleTestList *task, BattleTestWindows *windows);
+ void WFIGHTTS_cameraList(BattleTestList *task, CameraListWindows *windows);
+ void WFIGHTTS_stageList(BattleTestStageList *task, TextWindow **windows);

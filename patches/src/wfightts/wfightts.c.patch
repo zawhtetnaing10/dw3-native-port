@@ -1,0 +1,368 @@
+--- a/src/wfightts/wfightts.c
++++ b/src/wfightts/wfightts.c
+@@ -237,7 +237,7 @@
+     case 1:
+         if (PAD.getPressed(0) & (1 << PAD_L1)) {
+             children->motions->setState(children->motions, 3);
+-            task->setSubstate(task, 5);
++            task->setSubstate(task, 6);
+         } else if (PAD.getPressed(0) & (1 << PAD_R1)) {
+             children->motions->setState(children->motions, 3);
+             task->setSubstate(task, 3);
+@@ -263,7 +263,7 @@
+         task->setSubstate(task, 1);
+     } else if (PAD.getPressed(0) & (1 << PAD_R1)) {
+         children->effects->setState(children->effects, 3);
+-        task->setSubstate(task, 4);
++        task->setSubstate(task, 6);
+     } else if (children->effects == NULL) {
+         if (task->side == -1) {
+             task->setSubstate(task, 0);
+@@ -277,7 +277,158 @@
+                 children->task.script->hits[2] = 3;
+                 children->task.script->hits[3] = 2;
+                 children->task.script->stage = -1;
+-                children->task.script->sound = 0x39;
++                if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 5) {
++                    /* Greymon's script 9: preview Flame Lance's stage and impact. */
++                    children->task.script->stage = 0x21;
++                    children->task.script->effect = 5;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0xD5) {
++                    /* WarGreymon's script 9: preview Flame Breath's stage and impact. */
++                    children->task.script->stage = 0x22;
++                    children->task.script->effect = 0x05;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 5) {
++                    /* Greymon's script 13: preview Triple Fire's stage and impacts. */
++                    children->task.script->stage = 0x21;
++                    children->task.script->effect = 4;
++                    children->task.script->sound = 0x19;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x1B) {
++                    /* MetalMamemon's script 9: preview Twin Missile's stage and impact. */
++                    children->task.script->stage = 0x30;
++                    children->task.script->effect = 0x41;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x176) {
++                    /* Kyubimon's script 9: preview Thunder Gemini's stage and impact. */
++                    children->task.script->stage = 0x2D;
++                    children->task.script->effect = 0x10;
++                    children->task.script->sound = 0x2C;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x177) {
++                    /* Taomon's script 9: preview Thunder Bolt's selected stage and impact. */
++                    children->task.script->stage = 0x2D;
++                    children->task.script->effect = 0x10;
++                    children->task.script->sound = 0x2C;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x178) {
++                    /* Sakuyamon's script 9: preview Electro Bolt's own stage and impact. */
++                    children->task.script->stage = 0x2E;
++                    children->task.script->effect = 0x10;
++                    children->task.script->sound = 0x2C;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x3B) {
++                    /* Phoenixmon's script 9: preview Lightning Bolt's stage and impact. */
++                    children->task.script->stage = 0x2E;
++                    children->task.script->effect = 0x0F;
++                    children->task.script->sound = 0x2E;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0xC4) {
++                    /* MetalGarurumon's script 9: preview Magical Cannon's impact. */
++                    children->task.script->stage = 0x31;
++                    children->task.script->effect = 0x12;
++                    children->task.script->sound = 0x3F;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x167) {
++                    /* Imperialdramon MF's script 9: preview Grand Wave's impact. */
++                    children->task.script->stage = 0x25;
++                    children->task.script->effect = 0x08;
++                    children->task.script->sound = 0x2E;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x179) {
++                    /* Beelzemon's script 9: preview Dark Elemental's impact. */
++                    children->task.script->stage = 0x34;
++                    children->task.script->effect = 0x3F;
++                    children->task.script->sound = 0x14;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x179) {
++                    /* Beelzemon's script 13: preview Black Scewer's impacts. */
++                    children->task.script->stage = 0x34;
++                    children->task.script->effect = 0x3F;
++                    children->task.script->sound = 0x14;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x17A) {
++                    /* MaloMyotismon's script 9: preview Darkness Chaos's impact. */
++                    children->task.script->stage = 0x34;
++                    children->task.script->effect = 0x07;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x174) {
++                    /* MegaGargomon's script 9: preview God Bombard's impact. */
++                    children->task.script->stage = 0x31;
++                    children->task.script->effect = 0x41;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x17D) {
++                    /* Imperialdramon PM's script 9: preview Flame Sphere's impact. */
++                    children->task.script->stage = 0x22;
++                    children->task.script->effect = 0x03;
++                    children->task.script->sound = 0x14;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0xD6) {
++                    /* Seraphimon's script 9: preview Sylph Storm's own impact. */
++                    children->task.script->stage = 0x2B;
++                    children->task.script->effect = 0x0E;
++                    children->task.script->sound = 0x1D;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0xFE) {
++                    /* Paildramon's script 9: preview Snowstorm's own stage and impact. */
++                    children->task.script->stage = 0x28;
++                    children->task.script->effect = 0x0C;
++                    children->task.script->sound = 0x2A;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x42) {
++                    /* Myotismon's script 9: preview Dark Fear's stage and impact. */
++                    children->task.script->stage = 0x33;
++                    children->task.script->effect = 0x07;
++                    children->task.script->sound = 0x40;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x14) {
++                    /* Angemon's script 9: preview Airdramon's Mega Tornado. */
++                    children->task.script->stage = 0x2B;
++                    children->task.script->effect = 0x0E;
++                    children->task.script->sound = 0x26;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x103) {
++                    /* Ex-Veemon's script 9: preview Ice Shower's stage and impact. */
++                    children->task.script->stage = 0x27;
++                    children->task.script->effect = 0x0A;
++                    children->task.script->sound = 0x2A;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0x06) {
++                    /* Devimon's script 9: preview Dark Matter's stage and impact. */
++                    children->task.script->stage = 0x33;
++                    children->task.script->effect = 0x06;
++                    children->task.script->sound = 0x19;
++                } else if (task->side == 0 && task->effect == 9 && children->models->getFighter(children->models, 0) == 0xEA) {
++                    /* Angewomon's script 9: preview Divine Rain's stage and impact. */
++                    children->task.script->stage = 0x24;
++                    children->task.script->effect = 0x08;
++                    children->task.script->sound = 0x2E;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x0C) {
++                    /* MetalGreymon's script 13: Master Fire launch, Rising Fire impacts. */
++                    children->task.script->stage = 0x22;
++                    children->task.script->effect = 0x03;
++                    children->task.script->sound = 0x14;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x94) {
++                    /* Imperialdramon's script 13: preview Giga Fire's stage and impacts. */
++                    children->task.script->stage = 0x22;
++                    children->task.script->effect = 0x05;
++                    children->task.script->sound = 0x40;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x1A) {
++                    /* SkullGreymon's script 13: preview Black Thorn's stage and impacts. */
++                    children->task.script->stage = 0x33;
++                    children->task.script->effect = 0x3E;
++                    children->task.script->sound = 0x1D;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x10B) {
++                    /* BK WarGreymon's script 13: preview Black Dart's stage and impacts. */
++                    children->task.script->stage = 0x33;
++                    children->task.script->effect = 0x3E;
++                    children->task.script->sound = 0x1D;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else if (task->side == 0 && task->effect == 13 && children->models->getFighter(children->models, 0) == 0x96) {
++                    /* Omnimon's script 13: preview Inferno's stage and impacts. */
++                    children->task.script->stage = 0x22;
++                    children->task.script->effect = 0x03;
++                    children->task.script->sound = 0x14;
++                    children->task.script->hits[0] = 0;
++                    children->task.script->hits[1] = 0;
++                } else {
++                    children->task.script->sound = 0x39;
++                }
+             } else {
+                 children->task.hitEffect = FIGHTSTG_startHitEffect(1, 0);
+             }
+@@ -285,6 +436,71 @@
+         }
+     }
+ }
++
++#ifdef NATIVE
++/* Page 6 previews a named technique on the right-side fighter.
++   Scene Test has no damage calculation, so supply landed hit results while
++   using the same technique ID and visual map as a normal player attack. */
++static inline void runTechniquePage(BattleTest *task, BattleTestChildren *children) {
++    TechData *tech;
++    FighterInfo *fighterInfo;
++    s32 *scripts;
++    s32 id;
++
++    switch (task->step) {
++    case 0:
++    default:
++        task->page = 6;
++        task->technique = -1;
++        children->techniques = WFIGHTTS_createTechniqueList(&task->technique);
++        task->nextStep(task);
++        break;
++    case 1:
++        if (children->techniques != NULL && PAD.getPressed(0) & (1 << PAD_L1)) {
++            children->techniques->setState(children->techniques, TASK_KILL);
++            task->setSubstate(task, 5);
++        } else if (children->techniques != NULL && PAD.getPressed(0) & (1 << PAD_R1)) {
++            children->techniques->setState(children->techniques, TASK_KILL);
++            task->setSubstate(task, 4);
++        } else if (children->techniques == NULL) {
++            id = task->technique;
++            if (id > 0 && children->task.task == NULL) {
++                tech = &TECHS[id - 1];
++                fighterInfo = FIGHTSTG_fighterCache.funcs.getInfo(
++                    children->models->getFighter(children->models, 0));
++                if (fighterInfo->effects != 0) {
++                    scripts = FILE_CACHE.getEntry(fighterInfo->effects);
++                    if (scripts[0] != 0 &&
++                        (tech->script == 9 || tech->script == 13) &&
++                        scripts[tech->script] != 0) {
++                        children->task.script = FIGHTSTG_createBattleScript();
++                        children->task.script->index = tech->script;
++                        children->task.script->enemy = 0;
++                        children->task.script->nativeTechId = id;
++                        children->task.script->effect = native_visual_get(
++                            id, NATIVE_VIS_IMPACT_SPRITE, tech->scriptEffect);
++                        children->task.script->sound = native_visual_get(
++                            id, NATIVE_VIS_IMPACT_SOUND, tech->scriptSound);
++                        children->task.script->stage = native_visual_get(
++                            id, NATIVE_VIS_STAGE, tech->scriptStage);
++                        children->task.script->hits[0] = 0;
++                        children->task.script->hits[1] = 0;
++                        children->task.script->hits[2] = 0;
++                        children->task.script->hits[3] = 1;
++                        task->nextStep(task);
++                        break;
++                    }
++                }
++            }
++            task->setSubstate(task, 0);
++        }
++        break;
++    case 2:
++        if (children->task.task == NULL) task->setSubstate(task, 0);
++        break;
++    }
++}
++#endif
+ 
+ /* With R2 held, the pad moves the display and START puts it back; without,
+    sets the normal display mode */
+@@ -365,6 +581,13 @@
+                 break;
+             }
+             break;
++#ifdef NATIVE
++        case 6:
++            list = 1;
++            runTechniquePage(task, children);
++            if (task->step == 2) list = 0;
++            break;
++#endif
+         }
+         if (list) {
+             FIGHTSTG_battle.drawBlendedQuad(BATTLE_LAYER_MENUS, 1, WFIGHTTS_backPoints, WFIGHTTS_backColors);
+@@ -383,10 +606,9 @@
+     }
+ }
+ 
+-/* WFIGHTTS's entry point: creates the battle test, though with 0 bytes for
+-   its fields and for its children */
++/* WFIGHTTS's entry point: give the task and its children their full storage. */
+ Task *WFIGHTTS_start(void) {
+-    return createTaskWithId(WFIGHTTS_battleTest, 0, 0, 0);
++    return createTaskWithId(WFIGHTTS_battleTest, sizeof(BattleTest), sizeof(BattleTestChildren), 0);
+ }
+ 
+ /* The fighter list: the partners on the right and the enemies on the left,
+@@ -959,6 +1181,88 @@
+     task->effect = effect;
+     return task;
+ }
++
++#ifdef NATIVE
++/* The 45 distinct techniques requested for visual previews. Hard Rain
++   (0x92) and Titanic Wave (0x94) are outside the requested list. */
++static const s32 nativePreviewTechs[] = {
++    0x89, 0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F, 0x90,
++    0x91, 0x93, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A,
++    0x9B, 0x9C, 0x9D, 0x9E, 0x9F, 0xA0, 0xA1, 0xA2,
++    0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA,
++    0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2,
++    0xB3, 0xB4, 0xB5, 0xB6, 0xB7
++};
++enum {
++    NATIVE_PREVIEW_COUNT = sizeof(nativePreviewTechs) / sizeof(nativePreviewTechs[0]),
++    NATIVE_PREVIEW_VISIBLE = 14
++};
++static s32 nativePreviewCursor;
++static s32 nativePreviewScroll;
++
++/* Scroll through localized skill names with fourteen rows on screen. */
++void WFIGHTTS_techniqueList(BattleTestTechniqueList *task, TextWindow **windows) {
++    s32 pressed;
++    s32 i;
++    s32 steps;
++
++    switch (task->state) {
++    case 0:
++    default:
++        for (i = 0; i < NATIVE_PREVIEW_VISIBLE; i++) {
++            windows[i] = createTextWindow(BATTLE_LAYER_MENUS, 1, 0x90, 0x28 + i * 12);
++        }
++        task->nextState(task);
++        break;
++    case 1:
++        pressed = PAD.getPressed(0) | PAD.getRepeated(0);
++        steps = PAD.getHeld(0) & (1 << PAD_SQUARE) ? 10 : 1;
++        if (pressed & (1 << PAD_UP)) {
++            task->cursor -= steps;
++            if (task->cursor < 0) task->cursor = 0;
++        } else if (pressed & (1 << PAD_DOWN)) {
++            task->cursor += steps;
++            if (task->cursor >= NATIVE_PREVIEW_COUNT) task->cursor = NATIVE_PREVIEW_COUNT - 1;
++        } else if (pressed & (1 << PAD_CROSS)) {
++            *task->result = nativePreviewTechs[task->cursor];
++            task->setState(task, TASK_KILL);
++        } else if (pressed & (1 << PAD_TRIANGLE)) {
++            *task->result = -1;
++            task->setState(task, TASK_KILL);
++        }
++        if (task->cursor < task->scroll) task->scroll = task->cursor;
++        if (task->cursor >= task->scroll + NATIVE_PREVIEW_VISIBLE) {
++            task->scroll = task->cursor - NATIVE_PREVIEW_VISIBLE + 1;
++        }
++        nativePreviewCursor = task->cursor;
++        nativePreviewScroll = task->scroll;
++        for (i = 0; i < NATIVE_PREVIEW_VISIBLE; i++) {
++            if (task->cursor == task->scroll + i && (GFX.funcs.getTime() & 8)) {
++                windows[i]->setVisible(windows[i], 0);
++            } else {
++                windows[i]->setVisible(windows[i], 1);
++                windows[i]->setString(windows[i], FILE_CACHE.load(TEXT_FILE(TEXT_SKILL_NAMES)),
++                                      nativePreviewTechs[task->scroll + i]);
++            }
++        }
++        break;
++    case TASK_DONE:
++    case TASK_KILL:
++        break;
++    }
++}
++
++BattleTestTechniqueList *WFIGHTTS_createTechniqueList(s32 *result) {
++    BattleTestTechniqueList *task = createTaskWithId(
++        WFIGHTTS_techniqueList, sizeof(BattleTestTechniqueList),
++        NATIVE_PREVIEW_VISIBLE * sizeof(TextWindow *), 0xFFFF);
++
++    task->result = result;
++    task->cursor = nativePreviewCursor;
++    task->scroll = nativePreviewScroll;
++    return task;
++}
++#endif
+ 
+ /* The strings of the tables below, as GCC emitted them: each table's last
+    to first, and each padded to a word. The padding after a table's last

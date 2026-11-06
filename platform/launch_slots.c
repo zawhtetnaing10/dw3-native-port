@@ -21,6 +21,19 @@ int native_launch_archives_ready(void) {
     return s_ready;
 }
 
+/* Only archives prepared by this generator may receive technique overrides.
+   BladeGarurumon's synthetic archive copies prepared MetalGarurumon scripts. */
+int native_visual_archive_enabled(int archive) {
+    int i;
+    int file_id = (unsigned int)archive >> 16;
+    if (!s_ready) return 0;
+    if (file_id == 1) return 1;
+    for (i = 0; i < NATIVE_LAUNCH_ARCHIVE_COUNT; i++) {
+        if (NATIVE_LAUNCH_ARCHIVES[i].file_id == file_id) return 1;
+    }
+    return 0;
+}
+
 static int16_t word(const uint8_t *bytes, uint32_t at) {
     return (int16_t)(bytes[at] | ((uint16_t)bytes[at + 1] << 8));
 }

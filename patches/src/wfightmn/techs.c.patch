@@ -13,19 +13,23 @@
      if (actor == 0) {
          choosePartnerScript(task, info, own, other);
          if (task->stage <= 0) {
-@@ -200,6 +206,18 @@
+@@ -200,6 +206,22 @@
                  }
              }
          }
 +#ifdef NATIVE
-+        /* Only player scripts 9/13 use generated launch markers. Keep the
-+           game's existing condition for whether this move changes stage. */
++        /* Apply complete visuals only to archives prepared with launch slots.
++           New partner forms with their own scripts keep their original effects. */
 +        if (task->index == 9 || task->index == 13) {
-+            task->nativeTechId = id;
-+            task->effect = native_visual_get(id, NATIVE_VIS_IMPACT_SPRITE, task->effect);
-+            task->sound = native_visual_get(id, NATIVE_VIS_IMPACT_SOUND, task->sound);
-+            if (task->stage > 0) {
-+                task->stage = native_visual_get(id, NATIVE_VIS_STAGE, task->stage);
++            BattleFighter *active = &FIGHTSTG_battle.fighters[0][FIGHTSTG_battle.active[0]];
++            FighterInfo *fighter = FIGHTSTG_fighterCache.funcs.getInfo(active->id);
++            if (fighter != NULL && native_visual_archive_enabled(fighter->effects)) {
++                task->nativeTechId = id;
++                task->effect = native_visual_get(id, NATIVE_VIS_IMPACT_SPRITE, task->effect);
++                task->sound = native_visual_get(id, NATIVE_VIS_IMPACT_SOUND, task->sound);
++                if (task->stage > 0) {
++                    task->stage = native_visual_get(id, NATIVE_VIS_STAGE, task->stage);
++                }
 +            }
 +        }
 +#endif

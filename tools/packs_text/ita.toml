@@ -141,4 +141,10 @@ strings = [
 	"Un avversario forte lo custodisce.\nSconfiggilo per ottenerlo.",
 	"Un avversario forte lo custodisce.\nAltrimenti, lo venderanno nei negozi.",
 	"Un avversario forte lo custodisce.\nAltrimenti, lo venderanno nei negozi.",
+	"ESCI",
+	"Vuoi uscire dal gioco?",
+	"MENU TITOLO",
+	"DESKTOP",
+	"ANNULLA",
+	"SALVA",
 ]

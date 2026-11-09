@@ -46,6 +46,7 @@ union SDL_Event;
 struct SDL_Renderer;
 int menu_active(void);   /* the game waits while it is open */
 void menu_toggle(void);
+void native_quit(void); /* the field menu's Quit (include/native.h): saves the menu's changes, then exits */
 int menu_event(const union SDL_Event *e); /* 1: the menu's */
 void menu_draw(struct SDL_Renderer *r);
 void set_fps(int sixty); /* the game's 60 Hz mode on or off */
@@ -81,21 +82,7 @@ void gl_depth_clear(void); /* a new ordering table: its 3D drawn over what came 
 void gl_refresh(int x, int y, int w, int h); /* the copy from VRAM, after the CPU wrote it */
 void gl_copy(int sx, int sy, int w, int h, int dx, int dy);
 void gl_copy_to(int sx, int sy, int w, int h, float dx, int dy, float dw);
-/* A small JSON reader (stagemods.c): numbers, strings, arrays and objects */
-typedef struct Json {
-    int type; /* 'n' number, 's' string, '[' array, '{' object, 0 null */
-    double num;
-    char *str;           /* a string */
-    char *key;           /* an object member's key */
-    struct Json *child;  /* the first item of an array or object */
-    struct Json *next;   /* the next item */
-} Json;
-Json *json_value(const char **p); /* NULL when it isn't JSON */
-void json_free(Json *j);
-Json *json_get(Json *obj, const char *key);
-Json *json_at(Json *arr, int i);
-int json_len(Json *arr);
-int json_int(Json *j);
+#include "json.h" /* the JSON reader (json.c) */
 /* an RGBA image over the copy, from (x0, y0) to (x1, y1), blended by its
    alpha (or added, ADD) inside the drawing area; its texture made in *tex on first use */
 typedef struct {
@@ -183,6 +170,8 @@ int spu_cd_queued(void);
 void spu_cd_clear(void);
 void spu_render(int16_t *out, int frames);
 void audio_vblank(int rate); /* mixes and queues one vsync of sound */
+void audio_mute(int on);     /* silence, while the window is inactive */
+extern int g_inactive_window; /* inactive_window: 0 nothing, 1 mute, 2 pause the game (mods.c) */
 void movie_vblank(int rate); /* platform/movie.c: the CD streams on */
 
 /* Logs once per call site key: for stubs and first-time events */
@@ -247,6 +236,7 @@ const char *pad_button_name(int bit);   /* "cross" */
 int *pad_keys(int bit);                 /* its two scancodes, 0 for none */
 int *pad_source(int bit);               /* its gamepad button, PAD_LT / PAD_RT or PAD_NONE */
 const char *pad_source_name(int src);   /* SDL's name: "a", "lefttrigger" */
+int pad_swapped(void);                  /* Triangle and Circle trade places (the Controls page's swap row) */
 void pad_bind_reset(void);              /* the defaults */
 int pad_bind_ini(const char *key, const char *value); /* 1: a binding, read */
 int pad_bind_line(int i, char *key, char *value, size_t size); /* line 0-31 for native.ini; 1: not the default */
@@ -272,15 +262,51 @@ extern int g_map_objective; /* map_objective = 1: the map blinks the story's nex
 extern int g_journal;       /* journal = 1: the field menu's journal row (mods.c) */
 extern int g_fast_travel;   /* fast_travel = 1: X on the map screen travels there (mods.c) */
 extern int g_extra_packs;   /* extra_packs = 0: the starter choice has the game's three (packs.c) */
-extern int g_flamedramon; /* flamedramon = 0: partners don't learn it (mods.c) */
 extern int g_bladegarurumon; /* bladegarurumon = 0: partners don't learn it (mods.c) */
+extern int g_custom_effects; /* custom_effects = 0: no effect images of data/mods/effects (effects.c) */
+extern int g_custom_sounds; /* custom_sounds = 0: no effect sounds of data/mods/effects, nor the sound library (effects.c) */
+/* A WAV of a mod, read the first time it plays (clips.c); its voices are added to the vsync's mix by native_sfx_mix */
+typedef struct {
+    char *path; /* kept until it has been read, and NULL once it can't be */
+    int16_t *data; /* stereo at AUDIO_RATE, once read */
+    int frames, vol; /* vol 256 = as it is */
+} NativeClip;
+void native_clip_set(NativeClip *c, const char *path, int vol);
+void native_clip_clear(NativeClip *c);
+int native_clip_ready(NativeClip *c);
+void native_clip_play(NativeClip *c);
+void native_sfx_mix(int16_t *buf, int frames);
+int native_sound_replace(int index); /* the sound library's WAV plays in place of the game's battle sound, 1 if so (soundlib.c) */
+void native_soundlib_warm(void);
+int native_sound_id(const char *name); /* a library sound's id for a script mod (0x100 and up), -1 when there is none (soundlib.c) */
+struct Json;
+int native_script_compile(struct Json *root, short *out, char *err, int errsz); /* a script mod's commands as the game's words (scriptmod.c) */
+void native_scripts_scan(void);
+int native_scripts_check(void); /* --check-mods: lists the script files, returns how many are rejected */
+extern int g_custom_scripts; /* custom_scripts = 0: the game's own battle scripts (scriptmod.c) */
+extern int g_save_anywhere; /* save_anywhere = 1: a SAVE row in the field menu (mods.c) */
+extern int g_save_from_menu;
+extern int g_menu_wrap;      /* menu_wrap = 1: a menu's cursor goes round at its ends (mods.c) */
+extern int g_ff_menu_speed;  /* ff_menu_speed = 1: menus repeat at their normal pace in fast forward (mods.c) */
+extern int g_skip_press_start; /* skip_press_start = 1: no PRESS START on the title (mods.c) */
+extern int g_heal_on_levelup; /* heal_on_levelup = 1: a partner that levels up is healed in full (mods.c) */
+extern int g_full_exp_share; /* full_exp_share = 1: full rewards for non-KO party members (mods.c) */
+extern int g_full_exp_eligible[3]; /* battle-end reward eligibility by party slot (mods.c) */
+extern int g_full_exp_report; /* the option captured for the current report (mods.c) */
 /* a file an option makes anew, whole, or NULL for the game's (mods.c; packs.c, bladegaru.c) */
 const uint8_t *made_file(int fid, long *size);
 void native_bladegarurumon_setup(void);
-void native_flamedramon_setup(void); /* the game's main/game/digimon.c (patched) */
+/* An allocation the game can't go on without (the overlays' first values, BladeGarurumon's and the mods' files, built once): P, or a message box
+   saying what ran out and the exit (main.c). What can fall back (an image, a cache) checks its NULL and does */
+void *native_must(void *p, const char *what);
+#define NATIVE_FIGHTERS_FILE 0x1CC /* SMDLDATA.PRO: the fighters, with the partners' records */
+int native_fighter_has_record(const unsigned char *f, long size, int model); /* bladegaru.c: MODEL is a partner of that file (a mod's "like") */
 const uint8_t *packs_file(int fid, long *size);
 const uint8_t *bladegaru_file(int fid, long *size);
 long native_read_raw(int fid, uint8_t **out); /* files.c: a file on disk whole, malloc'd; its size */
+#define NATIVE_MAX_FIDS 8192 /* the file ids files.c keeps: the disc's, then the field editor's and the mods' */
+int native_disc_file(int fid); /* files.c: data/files/<fid>.bin, a file of the player's disc, is there */
+int native_disk_file(int fid); /* files.c: data/mods/<fid>.bin or the disc's is there (the files options make anew aren't asked) */
 
 /* Platform state that is the console's, saved with the game's in a
    savestate (state.c): it sits in the game's variables' section */
@@ -288,6 +314,8 @@ long native_read_raw(int fid, uint8_t **out); /* files.c: a file on disk whole, 
 void state_key(int key);  /* a debug key (SDL keycode), from pump_events */
 void state_frame(void);   /* at the frame's end (native_wait_vblank): runs what the keys asked */
 int movie_playing(void);  /* movie.c */
+extern int g_render_sounds; /* --render-sounds: a hidden window, the sounds rendered to WAV files, then exit (soundrender.c) */
+int native_render_parse(const char *dir, const char *list); /* the indexes to render; 0 when none */
 int stage_dump(const char *dir); /* stagedump.c: --dump-stages DIR */
 extern int g_field_mode, g_field_progress, g_field_arg; /* state.c: --field MODE --progress N */
 extern int g_field_sets[64][2], g_field_set_count; /* --set CODE=VALUE (hex code), repeated */

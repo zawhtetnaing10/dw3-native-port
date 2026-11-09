@@ -1,5 +1,93 @@
 # Changelog
 
+## Unreleased
+
+- Cancel on B shows On when either the swapped keys or the swapped gamepad buttons are in place, so a custom binding on the other half no longer leaves it showing Off.
+
+## v0.18.9 (beta)
+
+- The launcher moves with the arrows where it makes sense. On the home screen, Left and Right walk the bar (Play, Settings, Saves, Tools, language) and Up and Down move between it and the buttons under it, where Left and Right swap Play and Quit. In Settings, Up from the first row reaches the tabs, and Left and Right switch them.
+- **Menu cursor wraps** (Options, Input; off by default). Up from the first row goes to the last, and down from the last to the first, in the field menu, the item lists and shops, and the techniques list (who uses it, which, and whom it heals). The other menus keep stopping at their ends. Also in the launcher's Input tab. Thanks to Hucaru (#14).
+- **Cancel on B**: a row in Controls (options menu, Input tab; and the launcher's Input tab) that swaps Triangle and Circle, keys and gamepad buttons, so the game's cancel is on B. It is a remap: the icons in the game's texts follow it, and pressing it again undoes it. The row, before the list of buttons, shows On or Off. Thanks to Hucaru (#14).
+- The launcher's settings list scrolls with the wheel by itself (three rows a notch) and the selection goes to the row under the pointer, instead of the selection jumping row by row and fighting the pointer; its scroll bar is wider, leaves the values clear and can be dragged with the mouse, its thumb lighting under the pointer and when held.
+- **Menus in fast forward** (Options, Input; off by default). With fast forward on, a menu's cursor repeats at its normal pace when a direction is held, instead of at the game's speed. Also in the launcher's Input tab. Thanks to Hucaru (#19).
+- **Skip PRESS START** (Options, Input; off by default). The title screen shows New game and Continue as soon as its intro ends, without waiting for Start. Also in the launcher's Input tab. Thanks to Hucaru (#17).
+- **Heal on level up** (Options, Mods; off by default). A partner that levels up in a battle gets its HP and MP back in full; its Digimon's levels do not heal. Also in the launcher's Mods tab. Thanks to Hucaru (#18).
+- **Inactive window** (Options, Display; off by default). While the game's window is not in front, nothing happens as before, the sound is muted, or the game is paused until the window is back. Also in the launcher's Display tab. Thanks to Hucaru (#16).
+
+## v0.18.8 (beta)
+
+- **Script mods** (`data/mods/scripts/<fighter>/<script>.json`): a fighter's battle script (its attack, hit, KO and evade scripts) as a list of commands that replaces the game's, e.g. `{"schema_version": 1, "commands": [{"op": "sound", "sound": "punch"}, {"op": "end"}]}`. A sound command can play a sound of the library, one of the game's (1 to 89), the hit's sound, or the game's own on a result 3 hit. A file that is wrong is rejected with the reason and the game's script runs; `--check-mods` lists them. Options > Mods > Custom scripts switches them off in game (also `native.ini` and the launcher's Mods tab). The model viewer (v0.18.5) edits the scripts in its Fighter tab and saves these files.
+
+## v0.18.7 (beta)
+
+- **A sound library** (`data/mods/sounds/sounds.json`): WAVs of that folder, each with a name and a volume, and a `replace` table that says which of the game's battle sounds (1 to 89) each one replaces, e.g. `{"sounds": {"punch": {"file": "punch.wav", "volume": 1}}, "replace": {"57": "punch"}}`. A replaced sound plays the WAV wherever the game plays it (hits, steps, falls, effects' casts), to its end. Options > Mods > Custom sounds switches it off in game, and `--render-sounds` never replaces, so the game's own stay available. WAVs load when they first play, or a frame at a time at start-up for the ones that replace a sound. The model viewer (v0.18.4) has a Sounds tab to import, name and assign them.
+
+## v0.18.6 (beta)
+
+- **An effect's sound replaces the game's hit sound** (v0.18.5 mixed it with the game's). With Custom sounds on and a sound in the effect's folder, only that sound plays; with it off, or no sound in the folder, the game's own plays. A hit that is a result 3 always keeps the game's. WAVs load the first time they are needed, not at start-up, so nothing stalls a hit.
+- `dw2003.exe --render-sounds DIR [list]` plays the game's battle sounds with its own sound code and writes each as `DIR/<index>.wav`, with no window or audio device. The launcher does it for all of them into `data/sounds` after reading the disc, and once at start-up on an install that doesn't have them (or whose `data/sounds/version.txt` is older), in the background. A render that fails is not retried at every start. The model viewer (v0.18.3) uses them for its Original sound buttons.
+
+## v0.18.5 (beta)
+
+- **Custom effects and Custom sounds** (Options, Mods; on by default). Custom effects plays the battle effects' own images (`data/mods/effects/`) instead of the game's; off plays the game's own. An `effect.json` can also give the folder a sound (`{"sound": {"file": "hit.wav", "volume": 1}}`: a WAV of up to 10 s, any rate or channels, volume 0 to 4) that plays when the effect starts, mixed with the game's own; a folder with only a sound needs no PNGs. Both switch in game and show at the next effect. They are also in `native.ini` and in the launcher's Mods tab.
+- The launcher's Tools tab shows an **Update** button, with the new version, to the right of Open on the model viewer's and the field editor's rows when a newer release of that tool is out, instead of one row for both. Left and right move between the two buttons; the mouse picks by where it clicks.
+
+## v0.18.4 (beta)
+
+- **Save anywhere** (Options, Mods; off by default). The field menu gets a SAVE row that opens the game's memory card screen from wherever you stand; loading that save puts you back at the same spot. The slot shows the area and the place's name. Cancelling returns to the field. A save made this way can show a wrong place name in the original game or an emulator. Thanks to Hucaru (#2).
+- **Quit** in the field menu asks "Do you wish to quit the game?" with TITLE MENU, DESKTOP and CANCEL (shown in the game's five languages), and the options menu (Display tab) has a Quit game row. Thanks to Hucaru (#1).
+- The launcher's Mods tab has the Full EXP Share and Save anywhere rows.
+- Fixed: the launcher's "Your team" showed the slot with the most play time instead of the last one saved.
+
+## v0.18.3 (beta)
+
+- **Full EXP Share** (Options, Mods; off by default). Every party partner still standing at the end of a battle gets the full EXP, even if it did not fight, and its selected or used digivolutions the full Digimon EXP; knocked-out partners get neither. Thanks to Zaw Htet Naing (#13, #12).
+- For mod authors: `dw2003.exe --check-mods` lists the Digimon mods in `data/mods/digimon` (loaded, disabled, rejected or skipped, with the reason and any warning) and exits with the number rejected. It prints to standard output, so redirect it to a file (`dw2003.exe --check-mods > mods.txt`).
+- If the game cannot allocate memory at start-up it now says so in a message box and exits, instead of crashing.
+- For builders: `build.py` stops when `dw3_decomp` is not at the commit the port was made against, or has uncommitted changes (`--allow-decomp-mismatch` overrides it); it also fails on a new unimplemented PsyQ function (`tools/stubs.baseline`), records what built it in `build/report.md`, and the repository's tests run on GitHub Actions (`tools/run_tests.py`).
+
+## v0.18.2 (beta)
+
+- **A Digimon mod's `like` is checked.** It must be a partner of the game's fighters' file (259, ExVeemon's, by default); a mod that points at one that isn't there is rejected and the log says so, where before it loaded and its record was silently left out.
+- The effects' and the stage props' JSON files (`effect.json`, `stages.json`, `props.json`) are read by the same strict reader as the manifests: a name twice, a malformed number, text after the value or a file over 4 MB is now reported in the log, with its line, instead of being let by.
+- Fixed: looking up a fighter in the fighters' file could read outside it when the file's list started at a word near 4 GB.
+
+## v0.18.1 (beta)
+
+- Fixed: the launcher's updates (the port's and the tools') never unpacked: the path of Windows' tar had a tab in it, so tar never started. Versions before this one still can't update from the launcher; unpack this release by hand once and they can.
+
+## v0.18.0 (beta)
+
+- **Digimon mods are checked.** Each `digimon.json` is read by a stricter JSON reader (`platform/json.c`: limits on size and depth, every
+  allocation checked, real escapes and UTF-8, JSON's number grammar, a name twice in an object refused, `true`/`false`, nothing after the value) and validated: a wrong type, a number out of its
+  field's range, fewer than six techniques, a model that isn't there, isn't a model file or has fewer entries than `subs` asks for, `pair.scripts` past its scripts, a name or help that isn't plain ASCII, a missing English help, or a `fid` that is a file of the
+  game's disc rejects the mod, and the log says why. Folders are read in the order of their names, and mods that clash on id, fusion pair or
+  effect id are all left out. `schema_version`, `author` and `version` are accepted; `enabled` takes `true`/`false`.
+- Fixed: a manifest with fewer than six techniques read outside the techniques table; a `template` out of range and a Digimon's HP/MP above 255 or at 0
+  are now refused or held in the byte they live in.
+- Fixed: the stage mods' files were read without checking the file's size or a failed read.
+- New tests: `tools/test_json.c`, `tools/test_mods.c`; `test_effect_stages` now runs on the real JSON reader.
+
+## v0.17.8 (beta)
+
+- **The launcher updates the port.** When a newer version is out, the "New version" chip downloads it, installs it over the old files and
+  restarts the launcher; settings, saves and data stay. It asks to close the game first and never stops it.
+
+## v0.17.7 (beta)
+
+- **Digimon mods are folders now.** `data/mods/digimon/<name>/digimon.json` adds a Digimon partners can learn (stats, techniques with
+  their texts, what it is learnt with, an optional fusion), with no change to the port; the README lists the fields. Flamedramon is the first:
+  `dw2-extractor/flame_dcb.py` writes its manifest beside its model. BladeGarurumon stays built in, made from the game's own files.
+- Changed: to turn a Digimon mod off, set `"enabled": 0` in its manifest (or move its folder); `flamedramon = 0` in `native.ini` no longer
+  does anything. Flamedramon has no switch in the options menu or the launcher.
+- Fixed: the DNA fusion into Flamedramon left the end of its attack's sound looping until the next map or fight; it now stops with the attack.
+
+## v0.17.6 (beta)
+
+- Changed: the Mods tab no longer shows the Flamedramon row. Its model can't be shipped, so players found a switch they couldn't turn on.
+  If you make `data/mods/7120.bin` yourself the game still offers it; `flamedramon = 0` in `native.ini` turns it off.
+
 ## v0.17.5 (beta)
 
 - Fixed: Check for updates could say it couldn't reach GitHub when GitHub's API was refusing the request. The launcher now reads

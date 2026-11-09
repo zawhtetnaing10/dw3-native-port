@@ -40,7 +40,7 @@ int video_init(int scale, int fullscreen) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     s_window = SDL_CreateWindow("Digimon World 2003", video_window_width(scale), 240 * scale,
-                                SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | (fullscreen ? SDL_WINDOW_FULLSCREEN : 0));
+                                SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | (fullscreen ? SDL_WINDOW_FULLSCREEN : 0) | (g_render_sounds ? SDL_WINDOW_HIDDEN : 0));
     if (s_window == NULL) {
         LOG("window: %s", SDL_GetError());
         return 0;
@@ -66,6 +66,18 @@ int pump_events(void) {
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_EVENT_QUIT) {
             return 0;
+        }
+        /* the window lost its focus: sound muted, or the game held until it is back */
+        if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST && g_inactive_window) {
+            audio_mute(1);
+            while (g_inactive_window == 2 && SDL_WaitEvent(&e) && e.type != SDL_EVENT_WINDOW_FOCUS_GAINED) {
+                if (e.type == SDL_EVENT_QUIT) {
+                    return 0;
+                }
+            }
+        }
+        if (e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
+            audio_mute(0);
         }
         if (menu_event(&e)) {
             continue;

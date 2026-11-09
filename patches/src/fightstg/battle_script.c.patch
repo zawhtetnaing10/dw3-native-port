@@ -10,7 +10,7 @@
 +   marker for both preloads and playback, retaining the positive original as
 +   the fallback when the technique map omits a field. */
 +static s32 nativeLaunchId(BattleScript *script, s32 id, s32 field) {
-+    if (id >= 0 || script->enemy != 0 ||
++    if (id >= 0 || script->nativeTechId <= 0 || script->enemy != 0 ||
 +        (script->index != 9 && script->index != 13)) {
 +        return id;
 +    }
@@ -50,7 +50,7 @@
 +    else {
 +        effect = nativeLaunchId(script, effect, NATIVE_VIS_LAUNCH_SPRITE);
 +    }
-+    if (effect < 0 && script->enemy == 0 &&
++    if (effect < 0 && script->nativeTechId > 0 && script->enemy == 0 &&
 +        (script->index == 9 || script->index == 13)) {
 +        /* A disabled sprite still has three position words in play mode. */
 +        if (mode == 0) script->pc += 3;
@@ -77,7 +77,7 @@
  
 +#ifdef NATIVE
 +    id = nativeLaunchId(script, id, NATIVE_VIS_PROJECTILE);
-+    if (id < 0 && script->enemy == 0 &&
++    if (id < 0 && script->nativeTechId > 0 && script->enemy == 0 &&
 +        (script->index == 9 || script->index == 13)) {
 +        /* A disabled model still has six position/rotation words. */
 +        if (mode == 0) script->pc += 6;
@@ -92,7 +92,7 @@
      case 0:
      default:
 +#ifdef NATIVE
-+        if (*script->pc < 0 && script->enemy == 0 &&
++        if (*script->pc < 0 && script->nativeTechId > 0 && script->enemy == 0 &&
 +            (script->index == 9 || script->index == 13)) {
 +            s32 launchWait = -*script->pc;
 +
@@ -111,43 +111,48 @@
          script->wait = *script->pc;
          script->waiting = 1;
          script->pc--;
-@@ -503,6 +565,16 @@
+@@ -503,6 +565,40 @@
      s32 sound = *script->pc++;
      s32 time = *script->pc++;
  
 +#ifdef NATIVE
 +    s32 cue = sound;
 +
-+    if (sound < 0 && script->enemy == 0 &&
++    if (sound < 0 && script->nativeTechId > 0 && script->enemy == 0 &&
 +        (script->index == 9 || script->index == 13)) {
 +        sound = nativeLaunchId(script, sound, NATIVE_VIS_LAUNCH_SOUND);
 +        time = native_visual_get(script->nativeTechId,
 +                                 NATIVE_VIS_LAUNCH_SOUND_DURATION, time);
 +    }
-+#endif
-     if (sound == 0x62) {
-         sound = script->hits[script->sounds] == 3 ? 0x38 : script->sound;
-         script->sounds++;
-@@ -510,6 +582,18 @@
-         sound = script->hits[3] == 3 ? 0x38 : script->sound;
-         script->sounds++;
-     }
-+#ifdef NATIVE
-+    if (sound < 0 && script->enemy == 0 &&
++    if (sound < 0 && script->nativeTechId > 0 && script->enemy == 0 &&
 +        (script->index == 9 || script->index == 13)) return;
-+    if ((cue == 0x62 || cue == 0x63) && script->enemy == 0 &&
-+        (script->index == 9 || script->index == 13) &&
++    if ((cue == 0x62 || cue == 0x63) && script->nativeTechId > 0 &&
++        script->enemy == 0 && (script->index == 9 || script->index == 13) &&
 +        children->sound != NULL) {
 +        /* A timed launch sound must not suppress the technique's hit cue. */
 +        SOUND.keyOff(children->sound->sound, children->sound->voice);
 +        children->sound->destroy(children->sound);
 +        children->sound = NULL;
 +    }
++    /* the hit's sound is left out where the effect has a sound of its own (native.h), unless the hit is of result 3 (0x38: the
++       effect may not play then) */
++    if ((sound == 0x62 || sound == 0x63) && script->hits[sound == 0x62 ? script->sounds : 3] != 3 &&
++        native_effect_has_sound(script->effect, script->nativeCritical, script->nativeStage)) {
++        script->sounds++;
++        return;
++    }
 +#endif
-     if (children->sound == NULL) {
-         children->sound = FIGHTSTG_playBattleSound(sound, time);
-     }
-@@ -550,10 +634,20 @@
++#ifdef NATIVE
++    /* a script mod's sound that gives way to the game's own on a hit of result 3 (scriptmod.c) */
++    if (sound & 0x4000) {
++        sound = script->hits[script->sounds < 3 ? script->sounds : 3] == 3 ? 0x38 : sound & 0x3FFF;
++        script->sounds++;
++    } else
++#endif
+     if (sound == 0x62) {
+         sound = script->hits[script->sounds] == 3 ? 0x38 : script->sound;
+         script->sounds++;
+@@ -550,10 +646,27 @@
              script->model = script->enemy != 0 ? 0x10 : 0;
              script->models = TASK_REGISTRY.funcs.find(BATTLE_TASK_MODELS, -1, -1);
              script->fighter = script->models->get(script->models, script->model)->fighter;
@@ -161,20 +166,27 @@
              /* getArchiveEntry gives the entry as a u8 * */
              script->pc = FILE_CACHE.getArchiveEntry(script->index, FILE_CACHE.getEntry(script->archive));
 +#ifdef NATIVE
-+            if (script->index == 12 && g_dna_other != 0) {
-+                script->pc = native_dna_script(script->pc, g_dna_other, RANDOM.next());
++            {
++                /* a mod's script for this fighter plays instead (data/mods/scripts), the DNA fusion's included */
++                const short *mod = native_script_mod(script->fighter, script->index);
++
++                if (mod != NULL) {
++                    script->pc = (s16 *)mod;
++                } else if (script->index == 12 && g_dna_other != 0) {
++                    script->pc = native_dna_script(script->pc, g_dna_other, RANDOM.next());
++                }
 +            }
 +#endif
              if (script->index != 12) {
                  script->nextState(script);
                  break;
-@@ -606,6 +700,27 @@
+@@ -606,6 +719,27 @@
              case 9:
                  break;
              case 10:
 +#ifdef NATIVE
 +                if (script->nativeDeferredLaunchWait > 0 &&
-+                    script->enemy == 0 &&
++                    script->nativeTechId > 0 && script->enemy == 0 &&
 +                    (script->index == 9 || script->index == 13) &&
 +                    *script->pc < 0) {
 +                    if (!script->nativeDeferredWaitStarted) {
@@ -196,7 +208,7 @@
                  FIGHTSTG_runScriptSound(script, children);
                  break;
              case 11:
-@@ -644,7 +759,15 @@
+@@ -644,7 +778,15 @@
  
  /* Creates a battle script, which plays a technique (FIGHTSTG_updateBattleScript) */
  BattleScript *FIGHTSTG_createBattleScript(void) {

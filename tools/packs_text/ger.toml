@@ -141,4 +141,10 @@ strings = [
 	"Ein starker Gegner bewacht es hier.\nBesiege ihn, um es zu erhalten.",
 	"Ein Gegner bewacht es hier. Sonst\ngibt es das später im Laden.",
 	"Ein Gegner bewacht es hier. Sonst\ngibt es das später im Laden.",
+	"BEENDEN",
+	"Spiel beenden?",
+	"TITELMENÜ",
+	"DESKTOP",
+	"ABBRECHEN",
+	"SPEICHERN",
 ]

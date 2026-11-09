@@ -31,9 +31,9 @@ DECOMP = ROOT / "dw3_decomp"
 SANITIZE = "--sanitize" in sys.argv
 SAN_FLAGS = ["-fsanitize=bounds,null", "-fsanitize-recover=bounds,null",
              "-DNATIVE_HEAP_SIZE=(4*1024*1024)"] if SANITIZE else []
-# the checks bloat -O0 code past the 16 MB too: that build is -O1, with the
+# the checks bloat -O0 code past the 16 MB too, and -O1's exe has grown past it as well (17 MB): that build is -Os, with the
 # PSX GCC's leniency on type punning and overflow kept
-GAME_OPT = ["-O1", "-fno-strict-aliasing", "-fwrapv"] if SANITIZE else ["-O0"]
+GAME_OPT = ["-Os", "-fno-strict-aliasing", "-fwrapv"] if SANITIZE else ["-O0"]
 # --O2: the PSX GCC's leniency kept (type punning, overflow, reads through
 # NULL), and the IR emitted unoptimised so the rewrites below see the game's
 # own operations before -O2 works on them
@@ -256,13 +256,56 @@ def symbols(obj):
 # git pull in dw3_decomp, python native/build.py (patches that no longer apply
 # fail here, by name), tools/layout_check.py, a smoke boot, then bump this.
 DECOMP_COMMIT = "241649d58b5a6efdff87766a675e00faf5a49851"
+# The PsyQ functions known to be stubbed (one a line): a new one fails the build, so a stub that appears
+# by accident (a decomp update, a new call) isn't missed. A real one: add it with --update-stub-baseline
+STUB_BASELINE = NATIVE / "tools/stubs.baseline"
+
+
+def decomp_changes():
+    """dw3_decomp's own tracked files changed since its commit, and external/psyq_headers (the headers the game is compiled against) moved or changed.
+    The other submodules (m2c, maspsx, decomp-permuter) are the decompilation's tools, not the code built: they are not looked at."""
+    own = run(["git", "-C", DECOMP, "status", "--short", "--untracked-files=no", "--ignore-submodules=all"]).stdout
+    headers = run(["git", "-C", DECOMP, "status", "--short", "--untracked-files=no", "--", "external/psyq_headers"]).stdout
+    return (own + headers).strip()
+
+
+def provenance(head):
+    """What this build was made of, for the report: a bug report says which build it came from."""
+    def git(*a, cwd=NATIVE):
+        return run(["git", "-C", cwd, *a]).stdout.strip()
+    dirty = " (with changes not committed)" if git("status", "--short", "--", ".") else ""
+    flags = "sanitized (-Os, UBSan bounds/null)" if SANITIZE else "-O2 (game IR rewritten first)" if O2 else "-O0"
+    return [f"- dw3-native-port: {git('rev-parse', 'HEAD')[:12] or 'not a git checkout'}{dirty}",
+            f"- dw3_decomp: {head[:12] or 'not a git checkout'}" + ("" if head == DECOMP_COMMIT else f" (the port expects {DECOMP_COMMIT[:12]})") +
+            (" (with changes not committed)" if decomp_changes() else ""),
+            f"- compiler: {(run([CC, '--version']).stdout.splitlines() or ['unknown'])[0]}",
+            f"- SDL: {SDL.parent.name}",
+            f"- game code: {flags}"]
+
+
+def check_stub_baseline(missing):
+    """Fail on a stub the baseline doesn't list; --update-stub-baseline rewrites it from this build."""
+    known = set(STUB_BASELINE.read_text().split()) if STUB_BASELINE.exists() else set()
+    if "--update-stub-baseline" in sys.argv:
+        STUB_BASELINE.write_text("".join(f"{n}\n" for n in missing))
+        print(f"stub baseline: {len(missing)} written to {STUB_BASELINE.name}")
+        return
+    if gone := sorted(known - set(missing)):
+        print(f"stub baseline: {', '.join(gone)} no longer stubbed (run --update-stub-baseline to drop them)")
+    if new := sorted(set(missing) - known):
+        sys.exit("ERROR: PsyQ functions stubbed that the baseline doesn't list:\n" + "".join(f"  {n}\n" for n in new) +
+                 "Implement them, or run --update-stub-baseline if the stub is meant to stay.")
 
 
 def main():
     clean = "--clean" in sys.argv
     head = run(["git", "-C", DECOMP, "rev-parse", "HEAD"]).stdout.strip()
-    if head and head != DECOMP_COMMIT:
-        print(f"warning: dw3_decomp is at {head[:7]}, the port was made against {DECOMP_COMMIT[:7]} (see DECOMP_COMMIT)")
+    changes = decomp_changes() if head else ""
+    if head != DECOMP_COMMIT or changes:
+        if "--allow-decomp-mismatch" not in sys.argv:
+            sys.exit(f"ERROR: incompatible dw3_decomp revision\n\nExpected: {DECOMP_COMMIT}\nFound:    {head or 'not a git checkout'}"
+                     + (f", with changes not committed:\n{changes}" if changes else "") + "\n\nUse --allow-decomp-mismatch to override.")
+        print(f"warning: dw3_decomp is at {head[:7] or '?'}{' with changes' if changes else ''}, the port was made against {DECOMP_COMMIT[:7]} (see DECOMP_COMMIT)")
     if clean and OUT.exists():
         shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -372,6 +415,8 @@ def main():
         f.write(f"# Native build\n\n{len(srcs)} game files, {len(platform)} platform files, "
                 f"{len(missing)} PsyQ functions still stubbed\n\n## Stubbed\n\n")
         f.writelines(f"- {n}\n" for n in missing)
+        f.write("\n## Made with\n\n" + "\n".join(provenance(head)) + "\n")
+    check_stub_baseline(missing)
     print(f"OK {exe} ({len(missing)} stubs left, see build/report.md; {stripped} bytes of the game's tables "
           f"left to the player's disc)")
 
@@ -404,6 +449,16 @@ def selftest():
     d = Path(tempfile.mkdtemp()) / "t.d"
     d.write_text("F:\\a\\b\\ c\\x.ll: F:\\a\\b\\ c\\x.c \\\n  F:\\inc\\game.h F:\\inc\\heap\\ h.h\n")
     assert [str(p) for p in deps(d)] == ["F:\\a\\b c\\x.c", "F:\\inc\\game.h", "F:\\inc\\heap h.h"], deps(d)
+    global STUB_BASELINE
+    keep, STUB_BASELINE = STUB_BASELINE, d.with_name("stubs.baseline")  # a baseline: a known stub passes, a new one fails
+    STUB_BASELINE.write_text("A\nB\n")
+    check_stub_baseline(["A"])
+    try:
+        check_stub_baseline(["A", "C"])
+        raise AssertionError("a new stub passed")
+    except SystemExit as e:
+        assert "  C\n" in str(e) and "  A\n" not in str(e), e
+    STUB_BASELINE = keep
     print("selftest OK")
 
 

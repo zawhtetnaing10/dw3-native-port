@@ -7,6 +7,9 @@ static void go(int screen)
 {
     g_app.screen = screen;
     g_app.sel[screen] = 0;
+    g_app.btn = 0;
+    g_app.tabfocus = false;
+    g_app.playtab = false;
 }
 
 static void go_home(void)
@@ -15,6 +18,63 @@ static void go_home(void)
         g_app.note = L->s[S_SAVE_FAILED];
     }
     g_app.screen = SC_HOME;
+}
+
+static int first_selectable(void)
+{
+    int i = 0;
+    while (rows()[i].kind == R_HEADING) {
+        i++;
+    }
+    return i;
+}
+
+/* Home has two levels. The bar: Play | Settings | Saves | Tools | Language, moved with
+   Left/Right only (Down from the Play tab goes under it). Under it: the release chip
+   above the Play and Quit buttons; Left/Right swap those two, Up/Down go between levels */
+static int find_row(int kind, int id)
+{
+    const Row *r = rows();
+    for (int i = 0; i < row_count(r); i++) {
+        if (r[i].kind == kind && (kind == R_LANGUAGE || r[i].id == id)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void home_move(int a)
+{
+    static const short BAR[5] = {S_PLAY, S_SETTINGS, S_SAVES, S_TOOLS, -1}; /* -1: the language */
+    const Row *cur = &rows()[g_app.sel[SC_HOME]];
+    const bool bar = home_on_bar();
+    int to = -1;
+    if (bar && (a == A_LEFT || a == A_RIGHT)) {
+        int at = 0;
+        for (int k = 0; k < 5; k++) {
+            at = (cur->kind == R_LANGUAGE ? BAR[k] == -1 : cur->id == BAR[k]) ? k : at;
+        }
+        const int want = BAR[(at + (a == A_RIGHT ? 1 : 4)) % 5];
+        to = want == -1 ? find_row(R_LANGUAGE, 0) : find_row(R_ACTION, want);
+        g_app.playtab = want == S_PLAY;
+    } else if (bar && a == A_DOWN && cur->id == S_PLAY) {
+        to = find_row(R_ACTION, S_PLAY);
+        g_app.playtab = false;
+    } else if (!bar && (a == A_LEFT || a == A_RIGHT) && cur->id != S_RELEASE) {
+        to = find_row(R_ACTION, cur->id == S_PLAY ? S_QUIT : S_PLAY);
+    } else if (!bar && a == A_UP) {
+        to = cur->id != S_RELEASE ? find_row(R_ACTION, S_RELEASE) : -1;
+        if (to < 0) {
+            to = find_row(R_ACTION, S_PLAY);
+            g_app.playtab = true;
+        }
+    } else if (!bar && a == A_DOWN && cur->id == S_RELEASE) {
+        to = find_row(R_ACTION, S_PLAY);
+    }
+    if (to >= 0) {
+        g_app.sel[SC_HOME] = to;
+    }
+    g_app.btn = 0;
 }
 
 static void move_selection(int dir)
@@ -26,6 +86,7 @@ static void move_selection(int dir)
         i = (i + dir + n) % n;
     } while (r[i].kind == R_HEADING);
     g_app.sel[g_app.screen] = i;
+    g_app.btn = 0;
 }
 
 void language_set(int lang)
@@ -68,9 +129,18 @@ static void open_credits(void)
     SDL_OpenURL(path);
 }
 
+/* a tool's row: its program, or its update when that button has the focus */
+static void tool_row(int tool)
+{
+    if (tool_update_focus(tool)) {
+        tool_update_activate(tool);
+    } else {
+        tool_activate(tool);
+    }
+}
+
 static void activate(int id)
 {
-    char url[256];
     switch (id) {
     case S_PLAY: play(); break;
     case S_SETTINGS:
@@ -94,17 +164,16 @@ static void activate(int id)
     case S_BACK: go_home(); break;
     case S_QUIT: g_app.quit = true; break;
     case S_RESET: options_reset(); break;
+    case S_SWAP: binds_swap_cancel(); break;
     case S_RELEASE:
-        release_url(url, sizeof url);
-        SDL_OpenURL(url);
+        port_update_activate();
         break;
     case S_BROWSE: first_run_browse(); break;
-    case S_VIEWER: tool_activate(0); break;
-    case S_EDITOR: tool_activate(1); break;
+    case S_VIEWER: tool_row(0); break;
+    case S_EDITOR: tool_row(1); break;
     case S_FOLDER: SDL_OpenURL(SDL_GetBasePath()); break;
     case S_LOG: open_log(); break;
     case S_CREDITS: open_credits(); break;
-    case S_T_UPDATE: tool_update_activate(); break;
     case S_CHECK:
         if (tools_busy()) { /* the check would write what the download reads */
             g_app.note = L->s[S_T_BUSY];
@@ -138,6 +207,23 @@ void screens_action(int a)
         }
         return;
     }
+    if (g_app.tabfocus) { /* the tabs: Left/Right switch, Down goes back to the rows */
+        if (a == A_LEFT || a == A_RIGHT) {
+            a = a == A_RIGHT ? A_NEXT : A_PREV;
+        } else if (a == A_DOWN || a == A_OK) {
+            g_app.tabfocus = false;
+            return;
+        } else if (a == A_UP || a == A_CLEAR) {
+            return;
+        }
+    } else if (a == A_UP && g_app.screen == SC_SETTINGS && first_selectable() == g_app.sel[SC_SETTINGS]) {
+        g_app.tabfocus = true;
+        return;
+    }
+    if (g_app.screen == SC_HOME && !first_run_screen() && a >= A_UP && a <= A_RIGHT) {
+        home_move(a);
+        return;
+    }
     switch (a) {
     case A_UP: move_selection(-1); break;
     case A_DOWN: move_selection(1); break;
@@ -164,6 +250,8 @@ void screens_action(int a)
             } else {
                 language_set((g_app.lang + dir + LANGS) % LANGS);
             }
+        } else if (a != A_OK && row_tool(r) >= 0) { /* between the tool's two buttons */
+            g_app.btn = dir > 0 && tool_update_has(row_tool(r));
         } else if (a == A_OK) {
             activate(r->id);
         }
@@ -193,6 +281,8 @@ static void select_row(int i)
         g_app.note = NULL;
     }
     g_app.sel[g_app.screen] = i;
+    g_app.tabfocus = false;
+    g_app.playtab = false;
 }
 
 /* the language list, over everything: true when it took the mouse */
@@ -225,6 +315,9 @@ static bool mouse_picker(int x, int y, bool clicked)
 void screens_mouse(int x, int y, bool clicked)
 {
     if (mouse_picker(x, y, clicked)) {
+        return;
+    }
+    if (scroll_mouse(x, y, clicked)) { /* the scroll bar held */
         return;
     }
     if (first_run_screen()) {
@@ -278,6 +371,9 @@ void screens_mouse(int x, int y, bool clicked)
         return;
     }
     select_row(i);
+    if (row_tool(&r[i]) >= 0) {
+        g_app.btn = tool_update_has(row_tool(&r[i])) && x >= update_button(row_tool(&r[i])).x;
+    }
     if (r[i].kind == R_BIND) {
         bind_slot_set(x >= bind_column(2) ? 2 : x >= bind_column(1) ? 1 : 0);
         if (clicked) {
@@ -287,7 +383,7 @@ void screens_mouse(int x, int y, bool clicked)
         /* on the left arrow or just around it, down; anywhere else on the row, up */
         char value[32];
         option_value(r[i].id, L, value, sizeof value);
-        const int left_arrow = a.x + a.w - 13 - text_width(value, 1) - 8;
+        const int left_arrow = a.x + a.w - 13 - list_inset() - text_width(value, 1) - 8;
         screens_action(x >= left_arrow - 3 && x <= left_arrow + 6 ? A_LEFT : A_RIGHT);
     } else if (clicked) {
         screens_action(A_OK);
@@ -300,6 +396,7 @@ bool screens_tick(void)
     int code = 0;
     first_run_poll();
     tools_poll();
+    port_update_poll();
     saves_poll();
     if (game_ended(&code) && code != 0) {
         SDL_snprintf(failed, sizeof failed, L->s[S_GAME_FAILED], code);
@@ -309,13 +406,14 @@ bool screens_tick(void)
     if (message >= 0) {
         g_app.note = L->s[message];
     }
-    return first_run_reading() || game_running() || release_busy() || tools_busy() || saves_busy() || bind_capturing() >= 0;
+    return first_run_reading() || game_running() || release_busy() || tools_busy() || port_updating() || saves_busy() || bind_capturing() >= 0;
 }
 
 /* the settings kept, the disc's reading stopped cleanly; the game, if running, goes on */
 void screens_shutdown(void)
 {
     first_run_wait();
+    port_update_shutdown();
     tools_shutdown();
     if (g_app.screen == SC_SETTINGS) {
         options_save();

@@ -11,7 +11,14 @@
    each frame a PNG and its ticks (1/60 s, as the battle counts), the images
    moved by (x, y) screen pixels and scaled, blended by their alpha or added
    ("add"); "active": 0 leaves the folder out. Without it, every PNG in their
-   names' order, 2 ticks each. The folders are read once, at the start. */
+   names' order, 2 ticks each. A folder may also carry a sound, played when the
+   effect starts (a folder with only that has no PNGs):
+     "sound": {"file": "hit.wav", "volume": 1}
+   a WAV of the folder, in place of the game's hit sound of the attack (the
+   attack script leaves it out, but for a hit of result 3: native_effect_has_sound).
+   The WAVs are read after the images, one a frame (or at their first use). The folders are read
+   once, at the start; g_custom_effects and g_custom_sounds (the options) are
+   looked at each time an effect starts, so they switch while playing. */
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
@@ -22,6 +29,8 @@
 #define MAX_STAGED 512
 static const char *const STAGES[] = {"", "rookie", "champion", "ultimate", "mega"};
 #define STAGE_COUNT 5
+int g_custom_effects = 1;
+int g_custom_sounds = 1;
 static struct {
     int effect, critical, stage;
     int images; /* PNGs, in their names' order */
@@ -32,6 +41,7 @@ static struct {
     short image[MAX_FRAMES], end[MAX_FRAMES];
     float x, y, scale;
     int add;
+    NativeClip snd; /* its sound, if it has one (clips.c) */
 } s_sets[MAX_SETS];
 static int s_count;
 static struct {
@@ -43,23 +53,35 @@ static int by_name(const void *a, const void *b) {
     return strcmp(*(char *const *)a, *(char *const *)b);
 }
 
+/* FILE (a WAV in DIR) is SET's sound: only its path and volume are kept (VOL is the JSON's volume or NULL), the WAV is
+   read and converted when first needed (native_clip_ready) */
+static void load_sound(int set, const char *dir, const char *file, const Json *vol) {
+    char path[1200];
+
+    if (strchr(file, '/') != NULL || strchr(file, '\\') != NULL || strstr(file, "..") != NULL) {
+        LOG("effects: %s: sound %s is not a file of the folder", dir, file);
+        return;
+    }
+    SDL_snprintf(path, sizeof path, "%s/%s", dir, file);
+    if (!SDL_GetPathInfo(path, NULL)) {
+        LOG("effects: %s: no such sound", path);
+        return;
+    }
+    native_clip_set(&s_sets[set].snd, path, vol != NULL && vol->type == 'n' && vol->num >= 0 && vol->num <= 4 ? (int)(vol->num * 256) : 256);
+}
+
 /* The folder's effect.json, into SET's frames; 0 without one */
 static int read_json(int set, const char *dir) {
     char path[1200];
-    char *text;
-    const char *p;
+    JsonInfo ji;
     Json *root, *frames, *v;
     int i, k, tick = 0;
 
     SDL_snprintf(path, sizeof path, "%s/effect.json", dir);
-    if ((text = SDL_LoadFile(path, NULL)) == NULL) {
-        return 0;
-    }
-    p = text;
-    root = json_value(&p);
-    SDL_free(text);
-    if (root == NULL) {
-        LOG("effects: %s isn't JSON", path);
+    if ((root = json_load(path, JSON_LIMITS_STAGE, &ji)) == NULL) {
+        if (!ji.unopened) {
+            LOG("effects: %s: %s (line %d)", path, ji.msg, ji.line);
+        }
         return 0;
     }
     frames = json_get(root, "frames");
@@ -84,7 +106,13 @@ static int read_json(int set, const char *dir) {
     if ((v = json_get(root, "y")) != NULL && v->type == 'n') s_sets[set].y = (float)v->num;
     if ((v = json_get(root, "scale")) != NULL && v->type == 'n' && v->num > 0) s_sets[set].scale = (float)v->num;
     if ((v = json_get(root, "blend")) != NULL && v->type == 's') s_sets[set].add = SDL_strcmp(v->str, "add") == 0;
-    if ((v = json_get(root, "active")) != NULL && v->type == 'n' && v->num == 0) s_sets[set].frames = 0;
+    if ((v = json_get(root, "sound")) != NULL && (v = json_get(v, "file")) != NULL && v->type == 's') {
+        load_sound(set, dir, v->str, json_get(json_get(root, "sound"), "volume"));
+    }
+    if ((v = json_get(root, "active")) != NULL && v->type == 'n' && v->num == 0) {
+        s_sets[set].frames = 0;
+        native_clip_clear(&s_sets[set].snd);
+    }
     json_free(root);
     return 1;
 }
@@ -108,7 +136,8 @@ static void load_set(int effect, int stage, int critical) {
 
     SDL_snprintf(dir, sizeof dir, "%s/mods/effects/%d%s%s%s", data_dir(), effect, stage ? "/" : "", STAGES[stage], critical ? "/critical" : "");
     names = SDL_GlobDirectory(dir, "*.png", SDL_GLOB_CASEINSENSITIVE, &n);
-    if (names == NULL || n == 0) {
+    SDL_snprintf(path, sizeof path, "%s/effect.json", dir);
+    if (names == NULL || (n == 0 && !SDL_GetPathInfo(path, NULL))) { /* no PNGs, nor a sound's folder */
         SDL_free(names);
         return;
     }
@@ -153,20 +182,15 @@ static void load_set(int effect, int stage, int critical) {
 /* stages.json, into s_staged */
 static void read_stages(void) {
     char path[1100];
-    char *text;
-    const char *p;
+    JsonInfo ji;
     Json *root;
     int s, i;
 
     SDL_snprintf(path, sizeof path, "%s/mods/effects/stages.json", data_dir());
-    if ((text = SDL_LoadFile(path, NULL)) == NULL) {
-        return;
-    }
-    p = text;
-    root = json_value(&p);
-    SDL_free(text);
-    if (root == NULL) {
-        LOG("effects: %s isn't JSON", path);
+    if ((root = json_load(path, JSON_LIMITS_STAGE, &ji)) == NULL) {
+        if (!ji.unopened) {
+            LOG("effects: %s: %s (line %d)", path, ji.msg, ji.line);
+        }
         return;
     }
     for (s = 1; s < STAGE_COUNT; s++) {
@@ -218,18 +242,16 @@ int native_fighter_stage(int fighter) {
     return 0;
 }
 
-/* STAGE's images, else (no folder, or one left out) the nearest lower stage's and at last the base ones: in each, a critical hit's
-   if they are there, else the plain ones */
-int native_effect_images(int effect, int critical, int stage, int *ticks) {
+/* STAGE's set, else (no folder, or one left out) the nearest lower stage's and at last the base one: in each, a critical hit's
+   if it is there, else the plain one. A set counts when it has images, or a sound if SOUND */
+static int pick_set(int effect, int critical, int stage, int sound) {
     int s, c;
 
-    scan_mods();
     for (s = stage >= 0 && stage < STAGE_COUNT ? stage : 0; s >= 0; s--) {
         for (c = critical != 0; c >= 0; c--) {
             int set = find_set(effect, s, c);
 
-            if (set >= 0 && s_sets[set].frames > 0) {
-                *ticks = s_sets[set].end[s_sets[set].frames - 1];
+            if (set >= 0 && (sound ? s_sets[set].snd.path != NULL : s_sets[set].frames > 0)) {
                 return set;
             }
         }
@@ -237,12 +259,33 @@ int native_effect_images(int effect, int critical, int stage, int *ticks) {
     return -1;
 }
 
+/* Whether the effect plays a sound of its own: the game's hit sound is then left out (battle_script.c) */
+int native_effect_has_sound(int effect, int critical, int stage) {
+    scan_mods();
+    return g_custom_sounds && pick_set(effect, critical, stage, 1) >= 0;
+}
+
+/* An effect starts: its set's sound plays (g_custom_sounds), and its images are returned (g_custom_effects), else -1 */
+int native_effect_images(int effect, int critical, int stage, int *ticks) {
+    int set;
+
+    scan_mods();
+    if (g_custom_sounds && (set = pick_set(effect, critical, stage, 1)) >= 0) {
+        native_clip_play(&s_sets[set].snd);
+    }
+    if (!g_custom_effects || (set = pick_set(effect, critical, stage, 0)) < 0) {
+        return -1;
+    }
+    *ticks = s_sets[set].end[s_sets[set].frames - 1];
+    return set;
+}
+
 /* Once a frame from the start: every effect folder of the mod is read the first time (the game's start, behind its
    logos) and its pictures put on the card one a frame. Decoding a big PNG, premultiplying it and uploading it take
    milliseconds, and were done in the frame an effect first showed: a hitch in each of the first frames of a signature
    move. An effect that plays before it is warm is made on the spot, as before. */
 void native_effects_warm(void) {
-    static int s_set, s_img;
+    static int s_set, s_img, s_snd;
 
     scan_mods();
     for (; s_set < s_count; s_set++, s_img = 0) {
@@ -255,6 +298,13 @@ void native_effects_warm(void) {
             }
         }
     }
+    for (; s_snd < s_count; s_snd++) { /* the images are all up: the sounds, one a frame */
+        if (s_sets[s_snd].snd.path != NULL && s_sets[s_snd].snd.data == NULL) {
+            native_clip_ready(&s_sets[s_snd++].snd);
+            return;
+        }
+    }
+    native_soundlib_warm();
 }
 
 void native_effect_draw(unsigned key, float x, float y, float xs, int cx1, int cy1, int cx2, int cy2) {

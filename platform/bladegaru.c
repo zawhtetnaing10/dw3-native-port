@@ -17,7 +17,7 @@
 #include "platform.h"
 #include "../include/native.h"
 
-#define FIGHTERS_FILE 0x1CC /* SMDLDATA.PRO */
+#define FIGHTERS_FILE NATIVE_FIGHTERS_FILE
 #define NEW_FID 1           /* the Japanese MSAMTMAP, which the European game never reads */
 #define NEW_MODEL 471
 #define OLD_MODEL 469 /* BladeGarurumon's DNA form */
@@ -93,7 +93,7 @@ typedef struct {
 static int split(const uint8_t *b, long size, Blob **out) {
     uint32_t n = size >= 4 ? rd32(b) / 4 : 0, i, from, to;
 
-    *out = calloc(n ? n : 1, sizeof(Blob));
+    *out = native_must(calloc(n ? n : 1, sizeof(Blob)), "a model's entries");
     for (i = 0; i < n; i++) {
         from = rd32(b + 4 * i);
         to = i + 1 < n ? rd32(b + 4 * (i + 1)) : (uint32_t)size;
@@ -114,7 +114,7 @@ static uint8_t *join(const Blob *subs, int n, long *size) {
     for (i = 0; i < n; i++) {
         at += subs[i].n;
     }
-    out = malloc(at);
+    out = native_must(malloc(at), "a model file");
     *size = at;
     at = 4 * n;
     for (i = 0; i < n; i++) {
@@ -139,7 +139,7 @@ typedef struct {
 static void push(Keys *s, int x, int y, int z, int t) {
     if (s->n == s->cap) {
         s->cap = s->cap ? s->cap * 2 : 16;
-        s->k = realloc(s->k, s->cap * sizeof(Key));
+        s->k = native_must(realloc(s->k, s->cap * sizeof(Key)), "a motion's keys");
     }
     s->k[s->n].v[0] = x, s->k[s->n].v[1] = y, s->k[s->n].v[2] = z, s->k[s->n].v[3] = t;
     s->n++;
@@ -175,7 +175,7 @@ static Blob build_track(Keys secs[4]) {
     for (k = 0; k < 4; k++) {
         b.n += 8 * secs[k].n;
     }
-    b.p = malloc(b.n);
+    b.p = native_must(malloc(b.n), "a motion track");
     for (k = 0; k < 4; k++) {
         wr32(b.p + 4 * k, at);
         for (i = 0; i < secs[k].n; i++, at += 8) {
@@ -342,7 +342,7 @@ static uint8_t *build_model(const uint8_t *bgf, long bgsize, const uint8_t *mgf,
     height = (double)t0[0].k[0].v[1] / m0[0].k[0].v[1]; /* the roots' heights, a double */
     scale = height;
     free_keys(t0), free_keys(m0);
-    out = calloc(nb, sizeof(Blob));
+    out = native_must(calloc(nb, sizeof(Blob)), "BladeGarurumon's model");
     memcpy(out, bg, nb * sizeof(Blob));
     for (node = 0; skeleton(bg[BG_SKEL], node, 2) >= 0; node++) {
         int trk = skeleton(bg[BG_SKEL], node, 2);
@@ -393,7 +393,7 @@ static uint8_t *build_model(const uint8_t *bgf, long bgsize, const uint8_t *mgf,
     /* the motions: MetalGarurumon's table, with BladeGarurumon's idle (motion 0)
        and its DNA attack, moved, in place of the signature's segments */
     ev.n = mg[0].n;
-    ev.p = malloc(ev.n);
+    ev.p = native_must(malloc(ev.n), "BladeGarurumon's motions");
     memcpy(ev.p, mg[0].p, ev.n);
     if (rd32(ev.p) + 24 > ev.n || rd32(bg[0].p) + 24 > bg[0].n) {
         goto done;
@@ -433,7 +433,7 @@ static uint8_t *build_model(const uint8_t *bgf, long bgsize, const uint8_t *mgf,
         for (i = 0; i < 18; i++) {
             scripts.n += i == 11 ? code + pad : parts[i].n;
         }
-        scripts.p = calloc(1, scripts.n);
+        scripts.p = native_must(calloc(1, scripts.n), "BladeGarurumon's scripts");
         for (i = 0; i < 18; i++) {
             wr32(scripts.p + 4 * i, at);
             if (i == 11) {
@@ -464,7 +464,7 @@ static long find_key(const uint8_t *f, long size, int model, uint32_t *end) {
     uint32_t at = rd32(f + 4);
     long found = -1;
 
-    for (; at + 4 <= (uint32_t)size && (f[at] | f[at + 1] << 8) != 0; at += 4) {
+    for (; (uint64_t)at + 4 <= (uint64_t)size && (f[at] | f[at + 1] << 8) != 0; at += 4) {
         if ((int16_t)(f[at] | f[at + 1] << 8) == model) {
             found = at;
         }
@@ -484,7 +484,7 @@ static uint8_t *insert_record(const uint8_t *f, long size, long *out_size, int m
         return NULL;
     }
     *out_size = size + 4 + RECORD;
-    out = malloc(*out_size);
+    out = native_must(malloc(*out_size), "the fighters' file");
     memcpy(out, f, end);
     out[end] = (uint8_t)model, out[end + 1] = model >> 8, out[end + 2] = (uint8_t)n_player, out[end + 3] = (uint8_t)kind;
     memcpy(out + end + 4, f + end, o3 - end);
@@ -539,78 +539,101 @@ static uint8_t *build_fighters(const uint8_t *f, long size, long *out_size, int 
     return insert_record(f, size, out_size, NEW_MODEL, rec, f[old + 3]);
 }
 
-/* Flamedramon: a partner's record for model 472, ExVeemon's (its cameras, face, distance) with the file the model is in
-   (NATIVE_FLAMEDRAMON_FID) and the entries dw2-extractor's converter puts it at. NULL when it can't be made */
-#define EXVEEMON_MODEL 259
-#define FLAME_SUBS {40, 0, 41} /* its skeleton, motions and effects: the converter's FighterInfo */
-static uint8_t *add_flamedramon(const uint8_t *f, long size, long *out_size) {
-    static const int SUBS[3] = FLAME_SUBS;
-    uint32_t o2 = rd32(f + 8), o3 = rd32(f + 12), end;
-    long ex = find_key(f, size, EXVEEMON_MODEL, &end);
+/* The key of MODEL in the fighters' file F when a whole partner's record is there for it (what a mod's "like" copies), else -1 */
+static long partner_key(const uint8_t *f, long size, int model) {
+    uint32_t o2, o3, end;
+    long k;
+
+    if (f == NULL || size < 16) {
+        return -1;
+    }
+    o2 = rd32(f + 8), o3 = rd32(f + 12);
+    k = find_key(f, size, model, &end);
+    return k >= 0 && o3 <= (uint32_t)size && (uint64_t)o2 + (f[k + 2] + 1) * RECORD <= o3 ? k : -1;
+}
+
+/* For the manifest's check (digimon_mods.c): is MODEL a partner of the fighters' file F? 471 is the port's own, added after the file is read */
+int native_fighter_has_record(const uint8_t *f, long size, int model) {
+    return model == NEW_MODEL || partner_key(f, size, model) >= 0;
+}
+
+/* A Digimon mod (native.h): a partner's record for its id, that of its "like" model (ExVeemon's: cameras, face, distance) with the file the
+   model is in and the entries its manifest names (dw2-extractor's converter puts them there). NULL when it can't be made */
+static uint8_t *add_mod(const uint8_t *f, long size, long *out_size, const NativeMod *mod) {
+    long ex = partner_key(f, size, mod->like);
     uint8_t rec[RECORD], *out;
+    uint32_t o3;
     int i;
 
-    if (size < 16 || ex < 0 || o2 + (f[ex + 2] + 1) * RECORD > o3 || o3 > (uint32_t)size) {
+    if (ex < 0) {
         return NULL;
     }
-    memcpy(rec, f + o2 + f[ex + 2] * RECORD, RECORD);
+    o3 = rd32(f + 12);
+    memcpy(rec, f + rd32(f + 8) + f[ex + 2] * RECORD, RECORD);
     for (i = 0; i < 3; i++) {
-        wr32(rec + 4 * i, (uint32_t)NATIVE_FLAMEDRAMON_FID << 16 | SUBS[i]);
+        wr32(rec + 4 * i, (uint32_t)mod->fid << 16 | mod->subs[i]);
     }
-    /* the portrait cameras (6 and 7) are ExVeemon's, whose head leans back: Flamedramon's is level, 380 units further along the
-       facing, so the cameras' eye and target both move that much to keep it in the middle of the frame */
-    for (i = 6; i < 8; i++) {
+    /* the portrait cameras (6 and 7) are the like model's, whose head may lean back where this one's is level: the cameras' eye and
+       target both move portrait_dz along the facing to keep it in the middle of the frame (Flamedramon's is 380) */
+    for (i = 6; i < 8 && mod->portrait_dz != 0; i++) {
         int at;
 
         for (at = 0x1A + 6 * i + 4; at < 0x62 + 6 * i + 5; at += 0x62 - 0x1A) {
-            int16_t z = (int16_t)(rec[at] | rec[at + 1] << 8) + 380;
+            int16_t z = (int16_t)(rec[at] | rec[at + 1] << 8) + mod->portrait_dz;
 
             rec[at] = (uint8_t)z, rec[at + 1] = (uint8_t)(z >> 8);
         }
     }
-    out = insert_record(f, size, out_size, NATIVE_FLAMEDRAMON, rec, f[ex + 3]);
-    if (out != NULL) {
-        /* ExVeemon's face parts are rectangles of its own image: over Flamedramon's they would paint its thighs. Its own face is its
-           eyes (dw2-extractor's blink.py): a part of the model's image with the open, half shut and shut frames beside it, then the
-           table's end mark, past the file's end */
-        static const uint8_t FACE[20] = {2, 3, 8, 17, 32, 3, 40, 3, 48, 3, 0xFF};
-        uint8_t *g = realloc(out, *out_size + sizeof FACE);
+    out = insert_record(f, size, out_size, mod->id, rec, f[ex + 3]);
+    if (out != NULL && mod->face_n > 0) {
+        /* the like model's face parts are rectangles of its own image: over this model's they would paint the wrong place. The mod's own
+           face (Flamedramon's is its eyes, dw2-extractor's blink.py: a part of the model's image with the open, half shut and shut frames
+           beside it) is the table's end mark's before, past the file's end */
+        uint8_t *g = realloc(out, *out_size + 20);
 
         if (g == NULL) {
             free(out);
             return NULL;
         }
-        memcpy(g + *out_size, FACE, sizeof FACE);
+        memset(g + *out_size, 0, 20);
+        memcpy(g + *out_size, mod->face, mod->face_n);
+        g[*out_size + mod->face_n] = 0xFF;
         wr32(g + o3 + 4 + 12, rd32(g) + (uint32_t)*out_size);
-        *out_size += sizeof FACE;
+        *out_size += 20;
         out = g;
     }
     return out;
 }
 
-/* Flaming Rocket's effect models (native.h): their files hold the model's bones last */
+/* The mods' effect models (native.h): their files hold the model's bones last. Flamedramon's: the rocket (450) and the dome (451), then Digital Card
+   Battle's fire (dw2-extractor/flame_fx.py: the fire dome, two spirals and the burst of Fire Rocket, 452-455, the fist's flame, its glow and the
+   fireball of Knuckle Fire, 456-458) */
 int native_effect_model(int id, int *file, int *motionFile) {
-    /* the rocket (450) and the dome (451), then Digital Card Battle's fire (dw2-extractor/flame_fx.py): the fire dome, two spirals and the burst of
-       Fire Rocket (452-455), the fist's flame, its glow and the fireball of Knuckle Fire (456-458) */
-    static const int FIDS[9] = {7101, 7102, 7121, 7122, 7123, 7124, 7125, 7126, 7127};
-    static int bones[9] = {-1, -1, -1, -1, -1, -1, -1, -1, -1};
-    int i = id - (NATIVE_FLAMEDRAMON_TECH + 5);
+    static struct {
+        int fid, bones;
+    } cache[32];
+    static int n;
+    int fid, i;
 
-    if (i < 0 || i > 8 || !g_flamedramon) {
+    if (native_mod_for_effect(id, &fid) == NULL) {
         return 0;
     }
-    if (bones[i] < 0) {
+    for (i = 0; i < n && cache[i].fid != fid; i++) {
+    }
+    if (i == n && n < 32) {
         uint8_t *f;
-        long size = native_read_raw(FIDS[i], &f);
+        long size = native_read_raw(fid, &f);
 
-        bones[i] = size >= 4 && rd32(f) >= 8 ? (int)(rd32(f) / 4) - 1 : 0;
+        cache[n].fid = fid;
+        cache[n].bones = size >= 4 && rd32(f) >= 8 ? (int)(rd32(f) / 4) - 1 : 0;
         free(f);
+        n++;
     }
-    if (bones[i] == 0) {
+    if (i >= n || cache[i].bones == 0) {
         return 0;
     }
-    *file = FIDS[i] << 16 | bones[i];
-    *motionFile = FIDS[i] << 16;
+    *file = fid << 16 | cache[i].bones;
+    *motionFile = fid << 16;
     return 1;
 }
 
@@ -715,7 +738,7 @@ static uint8_t *with_strings(int fid, const Add *add, int n_add, long *size) {
         return NULL;
     }
     room += (uint32_t)fsize + 4 * count + 2 + count;
-    out = calloc(1, room + 2048);
+    out = native_must(calloc(1, room + 2048), "a text file");
     wr32(out, count);
     at = 4 + 4 * count;
     for (i = 0; i < count; i++) {
@@ -758,21 +781,6 @@ static uint8_t *glyphs(const char *s, uint8_t *out) {
     return out;
 }
 
-/* Flamedramon's techniques 445-450 and its name (NATIVE_FLAMEDRAMON_NAME), in the five languages' order of the Solar Laser
-   help: English, French, Italian, German, Spanish. No accents: the glyphs of those are the game's own to find */
-static const char *const FLAME_TECH_NAMES[6] = {"Ember Jab", "Burning Dash", "Blazing Burst", "Fire Rocket", "Knuckle Fire", "Express Claw"};
-static const char *const FLAME_TECH_HELP[5][6] = {
-    {"Ember jab. Fire attack.", "Burning dash. Fire charge.", "Blazing burst. Fire blast.", "Launch a blazing rocket at the enemy.",
-     "Punch with fire, then throw a fireball.", "Slash the enemy four times with claws."},
-    {"Coup de braise. Attaque de feu.", "Charge brulante. Attaque de feu.", "Explosion de flammes. Attaque de feu.",
-     "Lance une fusee de feu sur un ennemi.", "Frappe de feu, puis boule de feu.", "Quatre coups de griffes."},
-    {"Pugno di brace. Attacco di fuoco.", "Scatto rovente. Attacco di fuoco.", "Esplosione di fiamme. Attacco di fuoco.",
-     "Lancia un razzo di fuoco al nemico.", "Pugno di fuoco e palla infuocata.", "Quattro colpi di artigli al nemico."},
-    {"Glutschlag. Feuerangriff.", "Flammenansturm. Feuerangriff.", "Flammenstoss. Feuerangriff.", "Feuert eine Feuerrakete auf den Feind.",
-     "Feuerfaust, dann ein Feuerball.", "Vier Krallenhiebe auf den Feind."},
-    {"Golpe de brasas. Ataque de fuego.", "Embestida ardiente. Ataque de fuego.", "Rafaga de llamas. Ataque de fuego.",
-     "Lanza un cohete de fuego al enemigo.", "Punetazo de fuego y bola de fuego.", "Cuatro zarpazos al enemigo."}};
-
 #define DIGIMON_NAMES 0x4E /* DIGNAM: the files 78-84, of which the languages are some */
 
 /* The fighters' file and model 471, made the first time either is read;
@@ -787,18 +795,27 @@ const uint8_t *bladegaru_file(int fid, long *size) {
 
     if (t >= 0) {
         if (!made[t]) {
-            Add add[7];
-            uint8_t buf[7][160];
-            int i, n = 0;
+            Add add[1 + 6 * NATIVE_MAX_MODS];
+            uint8_t buf[1 + 6 * NATIVE_MAX_MODS][220]; /* two bytes a glyph, a space or a stop three */
+            int i, k, n = 0;
 
             made[t] = 1;
-            if (t >= 10) { /* Flamedramon's name */
-                add[n].index = NATIVE_FLAMEDRAMON_NAME, add[n++].text = glyphs("Flamedramon", buf[0]);
+            if (t >= 10) { /* the Digimon mods' names */
+                for (k = 0; k < NATIVE_MAX_MODS; k++) {
+                    if (native_mod_at(k) != NULL) {
+                        add[n].index = native_mod_at(k)->name_id, add[n].text = glyphs(native_mod_at(k)->name, buf[n]);
+                        n++;
+                    }
+                }
             } else {
                 add[n].index = SOLAR_LASER_TECH, add[n++].text = t < 5 ? SOLAR_LASER_NAME : SOLAR_LASER_HELP[t - 5];
-                for (i = 0; i < 6; i++, n++) {
-                    add[n].index = NATIVE_FLAMEDRAMON_TECH + i;
-                    add[n].text = glyphs(t < 5 ? FLAME_TECH_NAMES[i] : FLAME_TECH_HELP[t - 5][i], buf[1 + i]);
+                for (k = 0; k < NATIVE_MAX_MODS; k++) { /* and their techniques': names, then helps in the languages' order */
+                    for (i = 0; native_mod_at(k) != NULL && i < 6; i++, n++) {
+                        const NativeModTech *x = &native_mod_at(k)->techs[i];
+
+                        add[n].index = native_mod_at(k)->tech + i;
+                        add[n].text = glyphs(t < 5 ? x->name : x->help[t - 5], buf[n]);
+                    }
                 }
             }
             texts[t] = with_strings(fid, add, n, &texts_size[t]);
@@ -828,15 +845,15 @@ const uint8_t *bladegaru_file(int fid, long *size) {
             fighters = NULL;
             LOG("bladegarurumon: the fighters' file stays the game's");
         }
-        if (fsize > 0 && native_file_exists(NATIVE_FLAMEDRAMON_FID)) { /* and Flamedramon's, past BladeGarurumon's */
+        for (int k = 0; fsize > 0 && k < NATIVE_MAX_MODS; k++) { /* and the Digimon mods', past BladeGarurumon's */
             long gsize;
-            uint8_t *g = add_flamedramon(fighters != NULL ? fighters : f, fighters != NULL ? fighters_size : fsize, &gsize);
+            uint8_t *g = native_mod_at(k) == NULL ? NULL : add_mod(fighters != NULL ? fighters : f, fighters != NULL ? fighters_size : fsize, &gsize, native_mod_at(k));
 
             if (g != NULL) {
                 free(fighters);
                 fighters = g, fighters_size = gsize;
-            } else {
-                LOG("flamedramon: its record can't be added to the fighters' file");
+            } else if (native_mod_at(k) != NULL) {
+                LOG("digimon mod %s: its record can't be added to the fighters' file", native_mod_at(k)->name);
             }
         }
         free(f);

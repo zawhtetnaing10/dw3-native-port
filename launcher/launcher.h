@@ -37,20 +37,20 @@ void art_flag(int x, int y, int lang); /* 16x10: en, es, fr, de, it */
 
 /* lang_*.c */
 enum {
-    O_FPS, O_FULLSCREEN, O_WINDOW, O_WIDESCREEN, O_VSYNC, O_MOVIES,
+    O_FPS, O_FULLSCREEN, O_WINDOW, O_WIDESCREEN, O_VSYNC, O_MOVIES, O_INACTIVE,
     O_RESOLUTION, O_PERSPECTIVE, O_SMOOTH_3D, O_TRUE_COLOR, O_DITHER, O_SOFT_SHADOWS, O_BATTLE_SHADOWS, O_BATTLE_SKY,
-    O_ICONS, O_RUMBLE, O_DEADZONE,
+    O_ICONS, O_RUMBLE, O_DEADZONE, O_FF_MENUS, O_SKIP_START, O_MENU_WRAP,
     O_FAST_TEXT, O_FAST_TRAVEL, O_OBJECTIVE, O_JOURNAL, O_PACKS,
-    O_BLADEGARURUMON, O_FLAMEDRAMON,
+    O_BLADEGARURUMON, O_FULL_EXP_SHARE, O_HEAL_LEVELUP, O_SAVE_ANYWHERE, O_CUSTOM_EFFECTS, O_CUSTOM_SOUNDS, O_CUSTOM_SCRIPTS,
     O_COUNT
 };
 enum {
     S_TAGLINE, S_FAN,
     S_PLAY, S_PLAY_D, S_SETTINGS, S_SETTINGS_D, S_TOOLS, S_TOOLS_D, S_LANGUAGE, S_LANGUAGE_D, S_QUIT, S_QUIT_D,
-    S_RELEASE, S_RELEASE_D, S_READY, S_DISC_OK, S_VERSION,
+    S_RELEASE, S_RELEASE_D, S_U_CLOSE_GAME, S_READY, S_DISC_OK, S_VERSION,
     S_BROWSE, S_NEED, S_ONCE, S_DROP, S_OR, S_ISO, S_KEYS, S_READING, S_CANCEL,
     S_E_OPEN, S_E_GAME, S_E_BAD, S_E_WRITE, S_E_READ, S_E_TRUNCATED, S_E_CUE, S_E_SPACE, S_SEE_LOG,
-    S_DISPLAY, S_GRAPHICS, S_INPUT, S_MODS, S_PLAYABLE, S_RESET, S_RESET_D, S_ON, S_OFF, S_AUTO, S_KEYBOARD,
+    S_DISPLAY, S_GRAPHICS, S_INPUT, S_MODS, S_PLAYABLE, S_RESET, S_RESET_D, S_SWAP, S_SWAP_D, S_ON, S_OFF, S_AUTO, S_KEYBOARD, S_MUTE, S_PAUSE,
     S_BACK, S_BACK_D, S_FOLDER, S_FOLDER_D, S_LOG, S_LOG_D, S_VIEWER, S_VIEWER_D, S_EDITOR, S_EDITOR_D, S_CHECK, S_CHECK_D,
     S_CHECKING, S_UP_TO_DATE, S_CHECK_FAILED, S_GAME_RUNNING, S_GAME_FAILED, S_NO_EXE, S_SAVE_FAILED, S_NO_LOG,
     S_HINT_MENU, S_HINT_SETTINGS,
@@ -98,6 +98,8 @@ bool option_is_off(int option);
 enum { BIND_COUNT = 16 };
 void binds_load(void);
 void binds_reset(void);
+bool binds_swapped(void);    /* Triangle and Circle hold each other's defaults */
+void binds_swap_cancel(void); /* Triangle and Circle trade their keys and pad buttons */
 bool binds_save(void);
 const char *bind_text(int bit, int slot); /* slots: two keys, the pad's button */
 const char *bind_label(int bit);
@@ -115,6 +117,10 @@ bool game_running(void);
 bool game_ended(int *code); /* once, when it ends */
 bool process_open(const char *const *args, const char *cwd); /* started and left alone */
 int process_wait(const char *const *args, const char *cwd);  /* hidden, to its end: its exit code, or -1 */
+/* The game's own battle sounds as WAV files in data/sounds, for the model viewer (dw2003 --render-sounds): rendered once, after the
+   disc is read, and again if the folder is gone. sounds_render blocks (a few seconds); sounds_prepare does it in a thread when missing */
+void sounds_render(void);
+void sounds_prepare(void);
 
 /* net.c: HTTPS, blocking */
 typedef bool (*NetSink)(const void *data, int size, void *ctx); /* false stops */
@@ -127,14 +133,23 @@ void tool_activate(int tool);
 void tool_value(int tool, char *out, int size);
 void tools_check(void);        /* blocking: which of those the launcher installed have a newer release */
 int tool_update_index(void);   /* the tool with an update on offer, or being updated, or -1 */
-void tool_update_activate(void);
-void tool_update_value(char *out, int size);
+bool tool_update_has(int tool);   /* its Update button is there to press */
+const char *tool_update_tag(int tool);
+bool tool_update_focus(int tool); /* ...and the focus is on it */
+void tool_update_activate(int tool);
 void tool_update_fake(const char *tag);
 bool tool_update_now(int tool); /* --tool-update: blocking, for the tests */
 bool tools_busy(void);
 void tools_poll(void);
 void tools_shutdown(void);
 int tools_selftest(void);
+
+/* self_update.c: the port's own update, when asked */
+void port_update_activate(void);
+void port_update_poll(void);
+void port_update_shutdown(void);
+void port_cleanup(void); /* the .old programs of the last update */
+bool port_updating(void);
 
 /* release.c: is there a newer port on GitHub? */
 void release_start(bool manual);
@@ -143,6 +158,7 @@ bool release_newer(const char *tag, const char *own); /* both exactly v1.2.3, an
 const char *release_tag(void); /* the newer version, or NULL */
 bool release_busy(void);
 void release_url(char *out, int size);
+void release_zip_url(char *out, int size); /* the zip of that version */
 int release_finished_manual(void); /* once after a manual check: a string to show, or -1 */
 int release_selftest(void);
 
@@ -158,16 +174,24 @@ typedef struct {
     int scroll; /* the first row in sight of a list too long for its panel */
     bool quit;
     const char *note; /* shown instead of the description until the next move */
+    bool playtab; /* Home: the Play row stands for the bar's Play, not the button */
+    bool tabfocus; /* Settings: the focus is on the tabs, Left/Right switch them */
+    int btn; /* on a tool's row with an update: 1 when its Update button has the focus */
 } App;
 extern App g_app;
 #define L (LANG_TABLE[g_app.lang])
 const Row *rows(void);
 int row_count(const Row *r);
 int list_rows(const Row *r); /* those drawn in the list: all but the language */
+int list_inset(void);       /* the width the scroll bar takes from the rows' right edge, 0 without one */
+int list_in_sight(void);    /* the rows a settings list shows at once */
+bool home_on_bar(void);    /* Home: the focus is on the bar (Play tab, Settings, Saves, Tools, language) */
 int list_first(void);       /* the first in sight, with the selected one kept in sight */
 int bind_column(int slot);  /* where a binding's slot starts on screen */
 SDL_Rect list_rect(void);
 SDL_Rect tab_rect(int tab);
+SDL_Rect update_button(int tool); /* a tool row's Update button: x and width */
+int row_tool(const Row *r);       /* the tool a row opens, or -1 */
 bool first_run_screen(void);
 void screens_draw(void);
 
@@ -175,6 +199,10 @@ void screens_draw(void);
 enum { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_OK, A_BACK, A_PREV, A_NEXT, A_CLEAR };
 void screens_action(int action);
 void screens_mouse(int x, int y, bool clicked);
+bool scroll_mouse(int x, int y, bool clicked); /* scroll.c: true while the scroll bar holds the pointer */
+int scrollbar_state(void);   /* 0 at rest, 1 pointer over the bar, 2 held */
+void screens_mouse_release(void);
+void screens_wheel(int dir); /* the wheel: -1 up, 1 down */
 bool screens_tick(void); /* true while something's going on in the background */
 void screens_shutdown(void);
 void language_set(int lang);

@@ -81,8 +81,8 @@ options below, before you start, with the controls' keys and buttons and a descr
 below), a notice when a newer port is out, and **Tools**: the
 [model viewer](https://github.com/Feerdus95/dw3-model-viewer) and the
 [field editor](https://github.com/Feerdus95/dw3-field-editor), downloaded from GitHub on request into a folder of their
-own next to the port, set up to read `data/`, and opened from there. When a newer release of one is out, an **Update tool**
-row there replaces its program files and leaves its settings and data alone. A viewer or editor already beside the port is used
+own next to the port, set up to read `data/`, and opened from there. When a newer release of one is out, an **Update**
+button beside its Open replaces its program files and leaves its settings and data alone. A viewer or editor already beside the port is used
 instead of downloading. If `data/` was read by an older version, the viewer asks for the disc image once, for the
 file names (`data/names.txt`).
 
@@ -106,7 +106,7 @@ page shows what each of the card's slots holds, and can **Export** the card (a b
 restore first keeps the card you had in `saves/backups/`.
 
 **Extra Digimon and your saves.** The game's slots stay as the original game writes them, so a card from the port loads
-in the original game or an emulator. The Digimon the port adds beyond the game's 44 (BladeGarurumon, Flamedramon...) are
+in the original game or an emulator. The Digimon the port adds beyond the game's 44 (BladeGarurumon and the Digimon mods) are
 kept in a separate area of the card file, tied to the save they were made with, so the original game doesn't see them.
 If a slot is saved again by the original game, an emulator or another card, those Digimon are left out of it (the
 launcher marks it) and the port keeps a copy as `saves/card1.pre-stale.mcd` before its next save. Older versions of the port
@@ -155,9 +155,13 @@ button can be changed in the options menu's Input tab, **Controls**.
 | Battle sky and fog | battles get a sky behind the stage and their far side fades into a fog, each stage by its kind (open air, night, rooms, water) in `stages.ini` by the exe, which can be edited; digital, space and technique backdrops are left as they are |
 | Smooth movies | the movies smoothed when scaled up, or with sharp pixels |
 | VSync | each frame shown whole, at the screen's refresh: no tearing |
+| Inactive window | what the game does while its window is not in front (minimised, or another window has the focus): nothing, mute the sound, or pause everything until it is back |
 | Fullscreen, Window size | the window fits the screen it is on, centred |
-| Controls | each PlayStation button's two keys and gamepad button: pick a slot, press the key or button (Esc / Back cancels); Del / Y clears it, the last line puts the defaults back. A key or button set to one leaves any other it was on |
+| Controls | each PlayStation button's two keys and gamepad button: pick a slot, press the key or button (Esc / Back cancels); Del / Y clears it, the second to last line swaps Triangle (the game's cancel) and Circle, to cancel on B; the last puts the defaults back. A key or button set to one leaves any other it was on |
 | Button icons | the menu's icons: PS1 (the game's own in its texts), PS3, PS4, PS5 (the default), Xbox 360, Xbox One, Xbox Series, Switch, Keyboard, or Auto (the keyboard or the gamepad you used last, by its maker). The game's texts show their buttons (✕ ○ □ △) the same way, as the key or button each is bound to. By [Xelu](https://thoseawesomeguys.com/prompts/) |
+| Menus in fast forward | with fast forward on, a menu's cursor keeps its normal pace while a direction is held, instead of racing at x2, x3 or x5 |
+| Menu cursor wraps | up from the first row goes to the last and down from the last to the first, in the field menu, the item lists, the shops and the techniques list; the other menus keep stopping at their ends |
+| Skip PRESS START | the title screen shows New game / Continue at once, without waiting for Start (and without its ten seconds' timeout) |
 | Vibration, Stick deadzone | the gamepad |
 | Fast text | holding X advances the texts, outside battles and card games. After [Dmw2003FastText](https://github.com/markisha64/Dmw2003FastText), by markisha64 |
 | Fast travel | on the map screen (the field menu's Map), X on a visited area asks, and Yes takes you there as the menu closes, through one of the game's own doors into it that is open at that point of the story. Once you have been to Amaterasu, Square switches between the two servers' maps. Off by default. After [Flawe's Mod](https://www.romhacking.net/hacks/9376/), by Flawe |
@@ -166,6 +170,12 @@ button can be changed in the options menu's Input tab, **Controls**.
 | Fast forward | x2, x3 or x5 (Tab or R3 while playing); the music keeps its speed. Not saved |
 | Extra starter packs | three more packs to pick in a new game: Dragon (Agumon, Guilmon, Veemon), Tactical (Kotemon, Monmon, Patamon), Mystic (Kumamon, Renamon, Veemon) |
 | BladeGarurumon | a 45th Digimon every partner can learn, with Growlmon and Grizzmon at level 40: its own model (made at start from your disc's), techniques and signature, Solar Laser. Saves stay standard memory cards: its progress sits in the card file's spare space (see *Extra Digimon and your saves*), and an older save is carried over |
+| Full EXP Share | every party partner still above 0 HP at battle end gets the full partner EXP, even if benched; its selected or used digivolutions get full Digimon EXP. Knocked-out partners get neither. Each partner gets the whole reward, not a share, so with three partners the party earns three times the EXP. Off by default |
+| Heal on level up | a partner that levels up in a battle (not its Digimon) gets its HP and MP back in full, so grinding needs no trips to an inn |
+| Save anywhere | a SAVE row in the field menu (before QUIT): save wherever you stand, not only at save points, and loading puts you back in the same spot. It uses the game's own memory card screen and the same save format, so the save also loads with the option off. |
+| Custom effects | on by default: the battle effects' own images (`data/mods/effects/`, see below) play instead of the game's. Off plays the game's own; it switches in game, from the Mods tab, and shows at the next effect |
+| Custom sounds | on by default: the sound an effect's `effect.json` gives (see below) plays instead of the game's hit sound (an effect without one keeps the game's), and so do the sounds of the sound library that replace one of the game's. It switches in game, from the Mods tab |
+| Custom scripts | on by default: the battle scripts of `data/mods/scripts/` (see below) play instead of the game's for the fighters that have one. Off plays the game's own; it switches in game, from the Mods tab |
 
 `native.ini` can also be written by hand (see `native.ini.example`); every line is optional:
 
@@ -192,12 +202,35 @@ button can be changed in the options menu's Input tab, **Controls**.
     journal = 0          ; 1: the field menu's journal row
     extra_packs = 1      ; 0: only the game's three starter packs
     bladegarurumon = 1   ; 0: partners don't learn BladeGarurumon
+    full_exp_share = 0   ; 1: full EXP and Digimon EXP for non-KO party members
+    save_anywhere = 0    ; 1: a SAVE row in the field menu, to save anywhere
+    custom_effects = 1   ; 0: the game's own effect images, not data/mods/effects'
+    custom_sounds = 1    ; 0: no effect sounds from data/mods/effects
                          ; F12 in game saves the picture to screenshots/ by the exe
     debug = 0            ; 1: F1 debug stage select, F3 sound test, F4 vibration test, F2 dump of the game state,
                          ;    F5 / F9 save / load a state (saves/quick.state)
     log =                ; console logs: cd, snd, pad, mc, ovl, gpu or all
 
 ### Effects' own images (mods)
+
+**Digimon mods.** Any folder `data/mods/digimon/<name>/` with a `digimon.json` adds one more Digimon partners can digivolve into, with no
+change to the port (up to 4 at once). The mod is on while its model, the file `data/mods/<fid>.bin`, is there and `"enabled"` isn't `false` or 0;
+the launcher and `native.ini` have no switch for it. The model and the manifest come from a converter (the model viewer's DW2 tab, or
+`dw2-extractor/flame_dcb.py`, which makes Flamedramon's from your own Digimon World 2 and Digital Card Battle discs), or you write them.
+The manifest is JSON (numbers, strings, `true`/`false` and lists). Every manifest is checked when the game starts: one that would make
+the game read what isn't there, or holds a number its field can't take, is left out and the reason is written to the log
+(`digimon mod <folder>: rejected, ...`); what is only unusual loads with a `warning`. Two mods that want the same id, the same fusion pair
+or the same effect id are all left out (none wins by the order of the folders). Add `"schema_version": 1` (what a manifest without one is) and, for
+whoever shares it, `"author"` and `"version"`:
+
+- `id` (472, 473, ...: one a mod, it is how a save knows the form), `name` (ASCII), `fid`, `subs` [skeleton, motions, effects], `like` (a
+  model whose record gives it cameras and face: 259, ExVeemon), `template` (a Digimon of the game it starts from, 40: MetalGarurumon).
+- `hp_permille`, `mp_permille`, `stats` [strength, defense, spirit, wisdom, speed], `resists` [fire, water, ice, wind, thunder, machine, dark],
+  `status`, `learn` (the six levels it learns techniques), `known`, `needs` [Digimon, level, Digimon, level]: what a partner needs to learn it.
+- `techs`: six of `{name, help {en, fr, it, de, es}, from, mp, power, element_power, element, script}`; `from` is a technique of the
+  game whose sprites and sounds it takes. `signatures`: how many of the last skills are signatures.
+- Optional: `pair` (`{ids [a, b], element, element_power, shift, scripts [3], motions [3]}`: a pair that fuses into it in the Tag menu),
+  `effects` (`[[effect id, fid], ...]` models of its techniques), `tired`, `portrait_dz`, `face`.
 
 A battle's 2D effect can be drawn from your own PNGs: put them in `data/mods/effects/<id>/`. Each is the 320x240
 screen around the effect's point, as the model viewer's Export PNGs saves an effect, or a bigger image of the same
@@ -209,11 +242,43 @@ it, each with its own `effect.json` and `critical/`, and `data/mods/effects/stag
 
 A partner plays its level's images, else the nearest lower level's, else the base ones, else the original; one the file
 doesn't list, and every enemy, plays the base ones. In each folder a critical hit plays its `critical/`, else the plain
-images. `"active": 0` in an `effect.json` leaves that folder out. The folders are read when the game starts. Effect 2 is
+images. `"active": 0` in an `effect.json` leaves that folder out. An effect.json can also give the folder a sound,
+played when the effect starts, in place of the game's hit sound of that attack (a folder with only this needs no PNGs):
+
+    {"sound": {"file": "hit.wav", "volume": 1}}
+
+`file` is a WAV of the folder (any rate or channels; up to 10 s) and `volume` goes from 0 to 4. The Mods tab's Custom effects
+and Custom sounds switch the images and the sounds while the game runs. The folders are read when the game starts. Effect 2 is
 the Fight command's hit. The ids are the model viewer's Effects tab's, which also does all of this for you: it imports the
 PNGs, plays them, sets the levels and writes the folder's `effect.json`:
 
     {"frames": [["00.png", 2], ["01.png", 3]], "x": 0, "y": 0, "scale": 1, "blend": "alpha"}
+
+**The sound library.** `data/mods/sounds/sounds.json` names WAVs of its folder and says which of the game's battle sounds each
+replaces (the numbers the model viewer's Effects tab shows beside "Original"), wherever the game plays them:
+
+    {"sounds": {"punch": {"file": "punch.wav", "volume": 1}}, "replace": {"57": "punch"}}
+
+A name is 1 to 32 of `a-z 0-9 _ -`, a file a plain file name of the folder, the volume 0 to 4, a replaced number 1 to 89. A
+sound the game has no number for, a name that isn't in the library or a WAV that can't be read leaves the game's own sound (the log
+says why). It is read when the game starts, each WAV when it first plays, and Custom sounds switches it while the game runs.
+
+**Script mods.** `data/mods/scripts/<fighter>/<script>.json` is the whole battle script of one fighter (the fighter's number and the
+script's position in its archive, as the model viewer's Fighter tab shows them: 5 is the basic attack, 2 a hit reaction, 3 a KO):
+
+    {"schema_version": 1, "commands": [
+      {"op": "model", "who": "own", "do": "motion", "n": 3},
+      {"op": "sound", "sound": "punch", "time": 0, "hit": true},
+      {"op": "effect", "mode": "play", "effect": 2, "at": [0, -384, 5120]},
+      {"op": "wait", "ticks": 10},
+      {"op": "end"}]}
+
+The commands are `hit`, `model`, `effect`, `stage`, `camera`, `effect_model`, `flash`, `sound`, `wait`, `end` and `raw` (one command's
+words, for anything else); `docs/script-and-sound-mods.md` lists their fields. A sound is a name of the sound library, a game sound's
+number (1 to 89) or `"hit"` / `"hit_last"` (the technique's hit sound); `"hit": true` makes a hit of result 3 play the game's own sound
+instead. The numbers a command carries are the words the game stores, as the viewer lists them. A file with anything wrong in it is
+rejected as a whole and the game's script plays (`dw2003.exe --check-mods` and the log say why). The folders are read when the game
+starts, and Custom scripts switches them while the game runs.
 
 Each frame is a PNG and its ticks. The battle counts time in ticks of 1/60 s (on PAL too), so an effect lasts its
 ticks / 60 seconds; the original hit is 11 ticks, 0.18 s. `x`, `y` move the images in screen pixels, `scale` sizes
@@ -237,6 +302,12 @@ environment variable points the port at a `data/` elsewhere.
 `dw2003.exe --prepare-techniques` checks and prepares the 44 player fighter archives without opening the game. Your
 own `data/mods/NNNN.bin` takes priority over the corresponding prepared archive; removing a user override restores
 the prepared version on the next launch. The game never changes `data/files/` or your disc image.
+`dw2003.exe --check-mods` lists what the loader makes of each
+folder of `data/mods/digimon` (loaded, disabled, rejected and why, warnings) without opening the game; the exit code is
+how many of the listed ones were rejected (the folders past the report's room are counted apart, not judged).
+`dw2003.exe --render-sounds DIR [28,0x2A]` renders the game's own battle hit sounds (indexes of its battle sound table, a technique's
+`scriptSound`; all of them without a list) to `DIR/<index>.wav` with the window hidden, in about three seconds. The launcher does it
+once into `data/sounds` after it reads the disc (or when the folder is missing), for the model viewer's Original buttons.
 
 ## Building
 
@@ -267,6 +338,11 @@ Then:
 The first build has no `data/` yet, so its exe keeps the game's tables and can read the disc into `data/`; every build
 after that takes them out (`tools/asset_scan.py`) and writes `dw2003.fill`. `python tools/smoke.py` builds and boots the
 game unattended for 20 seconds; `python build.py --sanitize` builds with UBSan into `build-san/`.
+
+`build.py` refuses a `dw3_decomp` that isn't at `DECOMP_COMMIT` (`--allow-decomp-mismatch` goes on anyway) and a PsyQ
+stub that `tools/stubs.baseline` doesn't list (`--update-stub-baseline` rewrites the list); `build/report.md` says what
+each build was made of. `python tools/run_tests.py` builds and runs the unit tests that need neither the game nor its
+data (GitHub Actions runs it, and the self-tests, on every push).
 
 ## Credits
 

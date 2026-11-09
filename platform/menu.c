@@ -9,26 +9,29 @@
 extern int NTSC_MODE; /* the game's: 60 Hz (its NTSC mode) rather than 50 */
 void SsSetTickMode(long mode);
 
-enum { FPS, SCALE, SUBPIXEL, DEPTH, WIDESCREEN, PERSPECTIVE, SMOOTH_3D, TRUE_COLOR, DITHER, SOFT_SHADOWS, BATTLE_SHADOWS, BATTLE_SKY, MOVIES, VSYNC, FULLSCREEN, WINDOW, RUMBLE, DEADZONE, FAST_TEXT, FAST_FORWARD, FAST_TRAVEL, MAP_OBJECTIVE, JOURNAL, EXTRA_PACKS, BLADEGARURUMON, FLAMEDRAMON, ICONS, CONTROLS, ITEMS };
+enum { FPS, SCALE, SUBPIXEL, DEPTH, WIDESCREEN, PERSPECTIVE, SMOOTH_3D, TRUE_COLOR, DITHER, SOFT_SHADOWS, BATTLE_SHADOWS, BATTLE_SKY, MOVIES, VSYNC, FULLSCREEN, WINDOW, INACTIVE, RUMBLE, DEADZONE, FAST_TEXT, FAST_FORWARD, FF_MENUS, FAST_TRAVEL, MAP_OBJECTIVE, JOURNAL, EXTRA_PACKS, BLADEGARURUMON, FULL_EXP_SHARE, HEAL_LEVELUP, SAVE_ANYWHERE, CUSTOM_EFFECTS, CUSTOM_SOUNDS, CUSTOM_SCRIPTS, ICONS, CONTROLS, SKIP_START, MENU_WRAP, QUIT_GAME, ITEMS };
 
 static const char *LABELS[ITEMS] = {
-    "Frame rate", "Resolution", "Sub-pixel 3D", "Depth buffer", "Widescreen battles", "Perspective 3D", "Smooth 3D textures", "True colour", "Dithering", "Soft shadows", "Battle shadows", "Battle sky and fog", "Smooth movies", "VSync", "Fullscreen", "Window size", "Vibration", "Stick deadzone",
-    "Fast text (hold X)", "Fast forward (Tab/R3)", "Fast travel (map, X)", "Objective on map", "Digilog (field menu)", "Extra starter packs", "BladeGarurumon", "Flamedramon",
-    "Button icons", "Controls",
+    "Frame rate", "Resolution", "Sub-pixel 3D", "Depth buffer", "Widescreen battles", "Perspective 3D", "Smooth 3D textures", "True colour", "Dithering", "Soft shadows", "Battle shadows", "Battle sky and fog", "Smooth movies", "VSync", "Fullscreen", "Window size", "Inactive window", "Vibration", "Stick deadzone",
+    "Fast text (hold X)", "Fast forward (Tab/R3)", "Menus in fast forward", "Fast travel (map, X)", "Objective on map", "Digilog (field menu)", "Extra starter packs", "BladeGarurumon", "Full EXP Share", "Heal on level up", "Save anywhere", "Custom effects", "Custom sounds", "Custom scripts",
+    "Button icons", "Controls", "Skip PRESS START", "Menu cursor wraps", "Quit game",
 };
 
 /* the tabs and their options, each list ending with -1 */
 #define TABS 4
-#define ROWS 10 /* the longest tab's: the box stays the same size */
+#define ROWS 12 /* the longest tab's: the box stays the same size */
 static const char *TAB_NAMES[TABS] = {"Display", "Graphics", "Input", "Mods"};
 static const int TAB_ITEMS[TABS][ROWS + 1] = {
-    {FPS, FULLSCREEN, WINDOW, WIDESCREEN, VSYNC, MOVIES, -1},
+    {FPS, FULLSCREEN, WINDOW, WIDESCREEN, VSYNC, MOVIES, INACTIVE, QUIT_GAME, -1},
     {SCALE, SUBPIXEL, DEPTH, PERSPECTIVE, SMOOTH_3D, TRUE_COLOR, DITHER, SOFT_SHADOWS, BATTLE_SHADOWS, BATTLE_SKY, -1},
-    {ICONS, CONTROLS, RUMBLE, DEADZONE, -1},
-    {FAST_TEXT, FAST_FORWARD, FAST_TRAVEL, MAP_OBJECTIVE, JOURNAL, EXTRA_PACKS, BLADEGARURUMON, FLAMEDRAMON, -1},
+    {ICONS, CONTROLS, FAST_FORWARD, FF_MENUS, SKIP_START, MENU_WRAP, RUMBLE, DEADZONE, -1},
+    {FAST_TEXT, FAST_TRAVEL, MAP_OBJECTIVE, JOURNAL, EXTRA_PACKS, BLADEGARURUMON, FULL_EXP_SHARE, HEAL_LEVELUP, SAVE_ANYWHERE, CUSTOM_EFFECTS, CUSTOM_SOUNDS, CUSTOM_SCRIPTS, -1},
 };
 
 static int s_open, s_tab, s_cursor[TABS], s_changed;
+static int s_quit_armed, s_quit_was; /* "Quit game" asks for a second press */
+
+static void save(void);
 
 static int tab_count(int tab) {
     int n = 0;
@@ -72,7 +75,9 @@ static void value(int item, char *out, size_t size) {
         SDL_snprintf(out, size, "%s", SHOWN[g_icons]);
         return;
     }
+    case INACTIVE: SDL_snprintf(out, size, "%s", g_inactive_window == 2 ? "Pause" : g_inactive_window == 1 ? "Mute" : "Off"); return;
     case CONTROLS: SDL_snprintf(out, size, ">"); return;
+    case QUIT_GAME: SDL_snprintf(out, size, s_quit_armed ? "Press again" : ">"); return;
     case DITHER: on = g_dither_on; break;
     case SOFT_SHADOWS: on = g_soft_shadows; break;
     case BATTLE_SHADOWS: on = g_battle_shadows; break;
@@ -93,7 +98,15 @@ static void value(int item, char *out, size_t size) {
     case JOURNAL: on = g_journal; break;
     case EXTRA_PACKS: on = g_extra_packs; break;
     case BLADEGARURUMON: on = g_bladegarurumon; break;
-    case FLAMEDRAMON: on = g_flamedramon; break;
+    case FULL_EXP_SHARE: on = g_full_exp_share; break;
+    case HEAL_LEVELUP: on = g_heal_on_levelup; break;
+    case SKIP_START: on = g_skip_press_start; break;
+    case FF_MENUS: on = g_ff_menu_speed; break;
+    case MENU_WRAP: on = g_menu_wrap; break;
+    case SAVE_ANYWHERE: on = g_save_anywhere; break;
+    case CUSTOM_EFFECTS: on = g_custom_effects; break;
+    case CUSTOM_SOUNDS: on = g_custom_sounds; break;
+    case CUSTOM_SCRIPTS: on = g_custom_scripts; break;
     }
     SDL_snprintf(out, size, on ? "On" : "Off");
 }
@@ -123,6 +136,7 @@ static void change(int item, int dir) {
     case MOVIES: g_smooth_movies = !g_smooth_movies; break;
     case VSYNC: g_vsync = !g_vsync; break;
     case FULLSCREEN: SDL_SetWindowFullscreen(video_window(), !(SDL_GetWindowFlags(video_window()) & SDL_WINDOW_FULLSCREEN)); break;
+    case INACTIVE: g_inactive_window = (g_inactive_window + (dir < 0 ? 2 : 1)) % 3; break;
     case RUMBLE: g_rumble = !g_rumble; break;
     case FAST_TEXT: g_fast_text = !g_fast_text; break;
     case FAST_TRAVEL: g_fast_travel = !g_fast_travel; break;
@@ -130,12 +144,29 @@ static void change(int item, int dir) {
     case JOURNAL: g_journal = !g_journal; break;
     case EXTRA_PACKS: g_extra_packs = !g_extra_packs; break;
     case BLADEGARURUMON: g_bladegarurumon = !g_bladegarurumon; break;
-    case FLAMEDRAMON: g_flamedramon = !g_flamedramon; break;
+    case FULL_EXP_SHARE: g_full_exp_share = !g_full_exp_share; break;
+    case HEAL_LEVELUP: g_heal_on_levelup = !g_heal_on_levelup; break;
+    case SKIP_START: g_skip_press_start = !g_skip_press_start; break;
+    case FF_MENUS: g_ff_menu_speed = !g_ff_menu_speed; break;
+    case MENU_WRAP: g_menu_wrap = !g_menu_wrap; break;
+    case SAVE_ANYWHERE: g_save_anywhere = !g_save_anywhere; break;
+    case CUSTOM_EFFECTS: g_custom_effects = !g_custom_effects; break;
+    case CUSTOM_SOUNDS: g_custom_sounds = !g_custom_sounds; break;
+    case CUSTOM_SCRIPTS: g_custom_scripts = !g_custom_scripts; break;
     case FAST_FORWARD: ff_cycle(); return; /* not saved */
     case ICONS: g_icons = (g_icons + (dir < 0 ? ICONS_COUNT - 1 : 1)) % ICONS_COUNT; break;
     case CONTROLS:
         if (dir >= 0) {
             controls_open();
+        }
+        return;
+    case QUIT_GAME: /* the same exit as closing the window, after the menu's own changes are saved */
+        if (dir >= 0) {
+            if (!s_quit_was) {
+                s_quit_armed = 1;
+                return;
+            }
+            native_quit();
         }
         return;
     case WINDOW:
@@ -152,7 +183,7 @@ static void change(int item, int dir) {
 /* native.ini's "key = value" lines get the new values; missing keys are
    added, the bindings' only when not the default */
 static void save(void) {
-    static const char *KEYS[] = {"fps", "render_scale", "dither", "smooth_movies", "fullscreen", "scale", "rumble", "deadzone", "fast_text", "extra_packs", "bladegarurumon", "soft_shadows", "true_color", "perspective", "smooth_3d", "battle_shadows", "widescreen", "vsync", "fast_travel", "map_objective", "journal", "icons", "battle_sky", "flamedramon"};
+    static const char *KEYS[] = {"fps", "render_scale", "dither", "smooth_movies", "fullscreen", "scale", "rumble", "deadzone", "fast_text", "extra_packs", "bladegarurumon", "soft_shadows", "true_color", "perspective", "smooth_3d", "battle_shadows", "widescreen", "vsync", "fast_travel", "map_objective", "journal", "icons", "battle_sky", "full_exp_share", "save_anywhere", "custom_effects", "custom_sounds", "custom_scripts", "inactive_window", "heal_on_levelup", "skip_press_start", "ff_menu_speed", "menu_wrap"};
     enum { FIXED = SDL_arraysize(KEYS), ALL = FIXED + 32 };
     char path[1100], line[1200], key[32], names[ALL][32], vals[ALL][64];
     int done[ALL] = {0}, i, n = ALL;
@@ -183,7 +214,16 @@ static void save(void) {
     SDL_snprintf(vals[20], 16, "%d", g_journal);
     SDL_snprintf(vals[21], 16, "%s", ICON_NAMES[g_icons]);
     SDL_snprintf(vals[22], 16, "%d", g_battle_sky);
-    SDL_snprintf(vals[23], 16, "%d", g_flamedramon);
+    SDL_snprintf(vals[23], 16, "%d", g_full_exp_share);
+    SDL_snprintf(vals[24], 16, "%d", g_save_anywhere);
+    SDL_snprintf(vals[25], 16, "%d", g_custom_effects);
+    SDL_snprintf(vals[26], 16, "%d", g_custom_sounds);
+    SDL_snprintf(vals[27], 16, "%d", g_custom_scripts);
+    SDL_snprintf(vals[28], 16, "%d", g_inactive_window);
+    SDL_snprintf(vals[29], 16, "%d", g_heal_on_levelup);
+    SDL_snprintf(vals[30], 16, "%d", g_skip_press_start);
+    SDL_snprintf(vals[31], 16, "%d", g_ff_menu_speed);
+    SDL_snprintf(vals[32], 16, "%d", g_menu_wrap);
     for (i = 0; i < ALL; i++) {
         if (i < FIXED) {
             SDL_strlcpy(names[i], KEYS[i], sizeof names[i]);
@@ -219,8 +259,16 @@ static void save(void) {
     SDL_free(out);
 }
 
+void native_quit(void) {
+    if (s_changed) {
+        save();
+    }
+    exit(0);
+}
+
 void menu_toggle(void) {
     s_open = !s_open;
+    s_quit_armed = 0;
     if (!s_open && s_changed) {
         save();
         s_changed = 0;
@@ -230,6 +278,8 @@ void menu_toggle(void) {
 static void move(int up, int down, int left, int right, int ok, int tab) {
     int n = tab_count(s_tab), *c = &s_cursor[s_tab];
 
+    s_quit_was = s_quit_armed;
+    s_quit_armed = 0;
     if (tab) s_tab = (s_tab + tab + TABS) % TABS;
     if (up) *c = (*c + n - 1) % n;
     if (down) *c = (*c + 1) % n;

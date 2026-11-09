@@ -7,11 +7,20 @@
 static SDL_AudioStream *s_stream;
 static FILE *s_dump; /* DW3_WAV=<file>: the mix as raw s16 stereo 44.1 kHz, to check by ear or by script */
 static int s_failed;
+static int s_muted; /* the window is inactive (inactive_window = 1) */
+
+void audio_mute(int on) {
+    s_muted = on;
+}
 
 void audio_vblank(int rate) {
     static int16_t buf[AUDIO_RATE / 25 * 2];
     static int frac;
     int base, frames, queued, target;
+
+    if (g_render_sounds) {
+        return; /* the sounds are mixed by the render, not played */
+    }
 
     if (s_dump == NULL && SDL_getenv("DW3_WAV") != NULL) {
         s_dump = fopen(SDL_getenv("DW3_WAV"), "wb");
@@ -42,6 +51,7 @@ void audio_vblank(int rate) {
         frames = frames < base / 2 ? base / 2 : frames > base * 2 ? base * 2 : frames;
     }
     spu_render(buf, frames);
+    native_sfx_mix(buf, frames);
     if (g_log & LOG_SND) {
         static int count;
         int n, env, active = 0, rel = 0;
@@ -55,6 +65,9 @@ void audio_vblank(int rate) {
         if (++count % 25 == 0) {
             LOG("voices: %d playing, %d releasing", active, rel);
         }
+    }
+    if (s_muted) {
+        SDL_memset(buf, 0, frames * 4);
     }
     if (s_stream != NULL) {
         SDL_PutAudioStreamData(s_stream, buf, frames * 4);

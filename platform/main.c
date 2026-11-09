@@ -77,9 +77,9 @@ static int load_boot_image(void) {
    scale = <window size in 320x240 steps>, dither = 0/1, smooth_movies = 0/1,
    debug = 0/1, perf = 0/1 (the battle's performance meter; F10), log = <subsystems>, deadzone = <0..32767>, rumble = 0/1, fps = 50/60,
    render_scale = 1-8, fast_text = 0/1, fast_travel = 0/1, map_objective = 0/1, journal = 0/1, extra_packs = 0/1,
-   bladegarurumon = 0/1, flamedramon = 0/1, soft_shadows = 0/1, true_color = 0/1, perspective = 0/1,
+   bladegarurumon = 0/1, full_exp_share = 0/1, heal_on_levelup = 0/1, skip_press_start = 0/1, ff_menu_speed = 0/1, menu_wrap = 0/1, save_anywhere = 0/1, soft_shadows = 0/1, true_color = 0/1, perspective = 0/1,
    smooth_3d = 0/1, battle_shadows = 0/1, battle_sky = 0/1, widescreen = 0/1,
-   vsync = 0/1;
+   vsync = 0/1, inactive_window = 0 nothing / 1 mute / 2 pause;
    the options menu (menu.c) writes them back */
 static int s_fullscreen, s_scale, s_fps60, s_res_set; /* s_scale 0: from the screen */
 extern int NTSC_MODE;
@@ -158,6 +158,8 @@ static void read_ini(int data_only) {
         } else if (SDL_strcasecmp(key, "render_scale") == 0) {
             g_res_scale = SDL_clamp(atoi(value), 1, 8);
             s_res_set = 1;
+        } else if (SDL_strcasecmp(key, "inactive_window") == 0) {
+            g_inactive_window = SDL_clamp(atoi(value), 0, 2);
         } else if (SDL_strcasecmp(key, "fast_text") == 0) {
             g_fast_text = atoi(value) != 0;
         } else if (SDL_strcasecmp(key, "extra_packs") == 0) {
@@ -170,8 +172,24 @@ static void read_ini(int data_only) {
             g_journal = atoi(value) != 0;
         } else if (SDL_strcasecmp(key, "bladegarurumon") == 0) {
             g_bladegarurumon = atoi(value) != 0;
-        } else if (SDL_strcasecmp(key, "flamedramon") == 0) {
-            g_flamedramon = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "full_exp_share") == 0) {
+            g_full_exp_share = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "menu_wrap") == 0) {
+            g_menu_wrap = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "ff_menu_speed") == 0) {
+            g_ff_menu_speed = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "skip_press_start") == 0) {
+            g_skip_press_start = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "heal_on_levelup") == 0) {
+            g_heal_on_levelup = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "save_anywhere") == 0) {
+            g_save_anywhere = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "custom_effects") == 0) {
+            g_custom_effects = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "custom_sounds") == 0) {
+            g_custom_sounds = atoi(value) != 0;
+        } else if (SDL_strcasecmp(key, "custom_scripts") == 0) {
+            g_custom_scripts = atoi(value) != 0;
         } else if (SDL_strcasecmp(key, "fps") == 0) {
             s_fps60 = atoi(value) == 60;
         } else if (SDL_strcasecmp(key, "icons") == 0) {
@@ -203,6 +221,48 @@ static int open_launcher(void) {
     }
     SDL_DestroyProcess(launcher); /* it goes on by itself */
     return 1;
+}
+
+void *native_must(void *p, const char *what) {
+    if (p == NULL) {
+        char text[200];
+
+        snprintf(text, sizeof text, "Out of memory (%s). The game can't go on; close other programs and start it again.", what);
+        LOG("%s", text);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Digimon World 2003", text, NULL);
+        exit(1);
+    }
+    return p;
+}
+
+/* --check-mods: what the loader makes of each folder of data/mods/digimon, as the game and the launcher get it from native_mods_report.
+   The exit code is how many were rejected */
+static int check_mods_cli(void) {
+    static const char *const STATUS[] = {"loaded", "disabled", "REJECTED", "skipped"};
+    int n, dropped, bad = 0;
+    const NativeModReport *r = native_mods_report(&n, &dropped);
+
+    for (int i = 0; i < n; i++) {
+        bad += r[i].status == NATIVE_MOD_REJECTED;
+        printf("%-9s %-24s %s", STATUS[r[i].status], r[i].folder, r[i].name);
+        if (r[i].status == NATIVE_MOD_LOADED || r[i].status == NATIVE_MOD_DISABLED) {
+            printf(" (id %d, model %d)", r[i].id, r[i].fid);
+        }
+        printf("\n");
+        if (r[i].reason[0]) {
+            printf("          why: %s\n", r[i].reason);
+        }
+        if (r[i].warnings[0]) {
+            printf("          warning: %s\n", r[i].warnings);
+        }
+    }
+    if (dropped > 0) {
+        printf("%d more folders are not listed here (the report's room is %d)\n", dropped, NATIVE_MOD_REPORTS);
+    }
+    printf("%d folders, %d rejected\n", n + dropped, bad);
+    bad += native_scripts_check();
+    fflush(stdout);
+    return bad;
 }
 
 int main(int argc, char **argv) {
@@ -251,7 +311,11 @@ int main(int argc, char **argv) {
         return technique_archives_ready ? 0 : 1;
     }
     native_bladegarurumon_setup(); /* the game's tables as read, then its own */
-    native_flamedramon_setup();
+    native_mods_load(); /* data/mods/digimon/<name>/digimon.json, before the tables take them */
+    if (argc == 2 && SDL_strcmp(argv[1], "--check-mods") == 0) {
+        return check_mods_cli();
+    }
+    native_mods_setup();
     native_snapshot_overlays();
     native_fast_travel_setup(); /* the stages' doors, their variables put back */
     read_ini(0);
@@ -263,6 +327,10 @@ int main(int argc, char **argv) {
     if ((uintptr_t)STAGE_VRAM + 512 * 1024 > 0x01000000 || (uintptr_t)OVERLAY_VRAM + 512 * 1024 > 0x01000000 ||
         (uintptr_t)HEAP_BASE + NATIVE_HEAP_SIZE > 0x01000000) {
         LOG("the game's memory is above 16 MB: the GPU's 24-bit tags can't reach it");
+        return 1;
+    }
+    if ((argc == 3 || argc == 4) && SDL_strcmp(argv[1], "--render-sounds") == 0 && native_render_parse(argv[2], argc == 4 ? argv[3] : "") == 0) {
+        LOG("--render-sounds DIR 28,0x2A: no sound index (0 to 0x59) in the list");
         return 1;
     }
     if (argc == 3 && SDL_strcmp(argv[1], "--dump-stages") == 0) {

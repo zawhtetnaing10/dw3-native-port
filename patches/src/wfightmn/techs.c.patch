@@ -13,7 +13,7 @@
      if (actor == 0) {
          choosePartnerScript(task, info, own, other);
          if (task->stage <= 0) {
-@@ -200,6 +206,22 @@
+@@ -200,6 +206,23 @@
                  }
              }
          }
@@ -23,7 +23,8 @@
 +        if (task->index == 9 || task->index == 13) {
 +            BattleFighter *active = &FIGHTSTG_battle.fighters[0][FIGHTSTG_battle.active[0]];
 +            FighterInfo *fighter = FIGHTSTG_fighterCache.funcs.getInfo(active->id);
-+            if (fighter != NULL && native_visual_archive_enabled(fighter->effects)) {
++            if (fighter != NULL && native_visual_archive_enabled(fighter->effects) &&
++                native_script_mod(active->id, task->index) == NULL) {
 +                task->nativeTechId = id;
 +                task->effect = native_visual_get(id, NATIVE_VIS_IMPACT_SPRITE, task->effect);
 +                task->sound = native_visual_get(id, NATIVE_VIS_IMPACT_SOUND, task->sound);

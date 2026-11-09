@@ -1,6 +1,6 @@
-/* Which folder of data/mods/effects an effect plays (platform/effects.c), by stage and critical hit, on a tree it makes beside
+/* Which folder of data/mods/effects an effect plays (platform/effects.c), by stage and critical hit, and the sound library (soundlib.c), on a tree it makes beside
    the exe. Run from native/ (with SDL3.dll beside the exe):
-   i686-w64-mingw32-clang -Iplatform -Iinclude -I<SDL>/include tools/test_effect_stages.c platform/effects.c -L<SDL>/lib -lSDL3 -o build/test_effect_stages.exe
+   i686-w64-mingw32-clang -Iplatform -Iinclude -I<SDL>/include tools/test_effect_stages.c platform/effects.c platform/clips.c platform/soundlib.c platform/json.c -L<SDL>/lib -lSDL3 -o build/test_effect_stages.exe
    build/test_effect_stages.exe */
 #include <assert.h>
 #include <stdio.h>
@@ -11,75 +11,19 @@
 
 int native_effect_images(int effect, int critical, int stage, int *ticks);
 int native_fighter_stage(int fighter);
+int native_sound_replace(int index);
+void native_sfx_mix(int16_t *buf, int frames);
 
 static char s_root[512];
 const char *data_dir(void) { return s_root; }
 int g_log;
+int g_render_sounds;
 void native_log(const char *fmt, ...) {}
 int gte_widescreen(void) { return 0; }
 int gl_image_prepare(const struct SDL_Surface *s, unsigned *tex) { *tex = 1; return 1; }
 void gl_image(const struct SDL_Surface *s, unsigned *tex, float x1, float y1, float x2, float y2, int add, int cx1, int cy1, int cx2, int cy2) {}
 
-/* just what effects.c asks of the port's JSON: this test's files are written below, with no strings in the lists */
-static const char *skip(const char *p) { while (*p == ' ' || *p == '\n') p++; return p; }
-Json *json_value(const char **pp) {
-    const char *p = skip(*pp);
-    Json *j = calloc(1, sizeof *j), **tail = &j->child;
-
-    if (*p == '{' || *p == '[') {
-        char close = *p == '{' ? '}' : ']';
-
-        j->type = *p++;
-        for (p = skip(p); *p != close;) {
-            const char *key = NULL;
-            Json *item;
-            size_t len = 0;
-
-            if (j->type == '{') {
-                key = ++p;
-                len = strchr(p, '"') - p;
-                p = skip(key + len + 1) + 1;
-            }
-            *pp = p;
-            item = json_value(pp);
-            p = skip(*pp);
-            if (key) item->key = SDL_strndup(key, len);
-            *tail = item, tail = &item->next;
-            if (*p == ',') p = skip(p + 1);
-        }
-        *pp = p + 1;
-    } else if (*p == '"') {
-        const char *end = strchr(p + 1, '"');
-
-        j->type = 's', j->str = SDL_strndup(p + 1, end - p - 1), *pp = end + 1;
-    } else {
-        char *end;
-
-        j->type = 'n', j->num = strtod(p, &end), *pp = end;
-    }
-    return j;
-}
-void json_free(Json *j) {}
-Json *json_get(Json *o, const char *k) {
-    Json *c;
-
-    for (c = o ? o->child : NULL; c; c = c->next) if (c->key && strcmp(c->key, k) == 0) return c;
-    return NULL;
-}
-Json *json_at(Json *a, int i) {
-    Json *c = a ? a->child : NULL;
-
-    while (c && i-- > 0) c = c->next;
-    return c;
-}
-int json_len(Json *a) {
-    int n = 0;
-    Json *c;
-
-    for (c = a ? a->child : NULL; c; c = c->next) n++;
-    return n;
-}
-int json_int(Json *j) { return j ? (int)j->num : 0; }
+/* the port's JSON reader is linked in (platform/json.c) */
 
 static void put(const char *file, const char *text) {
     char p[800];
@@ -109,6 +53,35 @@ static int played(int effect, int critical, int stage) {
     return native_effect_images(effect, critical, stage, &ticks) < 0 ? 0 : ticks;
 }
 
+/* a folder with a sound only: a 0.1 s mono 22.05 kHz WAV of a constant 1000 */
+static void sound(const char *dir) {
+    unsigned char w[44 + 2205 * 2] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 1, 0, 1, 0, 0x22, 0x56, 0, 0,
+                                      0x44, 0xAC, 0, 0, 2, 0, 16, 0, 'd', 'a', 't', 'a', 0x3A, 0x11, 0, 0};
+    char p[800];
+    int i;
+
+    for (i = 0; i < 2205; i++) {
+        w[44 + i * 2] = 1000 & 0xFF;
+        w[45 + i * 2] = 1000 >> 8;
+    }
+    SDL_snprintf(p, sizeof p, "%s/%s", s_root, dir);
+    assert(SDL_CreateDirectory(p));
+    SDL_snprintf(p, sizeof p, "%s/hit.wav", dir);
+    SDL_snprintf(p, sizeof p, "%s/%s/hit.wav", s_root, dir);
+    assert(SDL_SaveFile(p, w, sizeof w));
+    SDL_snprintf(p, sizeof p, "%s/effect.json", dir);
+    put(p, "{\"sound\": {\"file\": \"hit.wav\", \"volume\": 0.5}}");
+}
+
+/* the mix of one vsync's worth of frames: the left sample of its frame 1000 */
+static int mixed(void) {
+    static int16_t buf[1470 * 2];
+
+    memset(buf, 0, sizeof buf);
+    native_sfx_mix(buf, 1470);
+    return buf[1000 * 2];
+}
+
 int main(void) {
     SDL_snprintf(s_root, sizeof s_root, "%sdw3_test_effect_stages", SDL_GetBasePath());
     SDL_RemovePath(s_root); /* a tree of an earlier run stays: it is rewritten */
@@ -119,6 +92,22 @@ int main(void) {
     art("mods/effects/3/champion", 40, "");
     art("mods/effects/4", 50, "");
     art("mods/effects/4/champion", 60, ", \"active\": 0");
+    sound("mods/effects/6");
+    {
+        char d[800];
+
+        SDL_snprintf(d, sizeof d, "%s/mods/effects/7", s_root);
+        assert(SDL_CreateDirectory(d));
+        SDL_snprintf(d, sizeof d, "%s/mods/effects/8", s_root);
+        assert(SDL_CreateDirectory(d));
+    }
+    put("mods/effects/7/effect.json", "{\"sound\": {\"file\": \"nope.wav\"}}"); /* no such file */
+    put("mods/effects/8/effect.json", "{\"sound\": {\"file\": \"bad.wav\"}}");
+    put("mods/effects/8/bad.wav", "not a wav"); /* read when it is needed */
+    sound("mods/sounds"); /* hit.wav, 0.1 s of 1000 */
+    put("mods/sounds/sounds.json",
+        "{\"sounds\": {\"punch\": {\"file\": \"hit.wav\", \"volume\": 0.5}, \"Bad\": {\"file\": \"hit.wav\"}, \"gone\": {\"file\": \"nope.wav\"}, "
+        "\"esc\": {\"file\": \"../x.wav\"}}, \"replace\": {\"57\": \"punch\", \"0\": \"punch\", \"999\": \"punch\", \"58\": \"gone\", \"59\": \"nobody\", \"60\": \"Bad\"}}");
     put("mods/effects/stages.json", "{\"rookie\": [3], \"champion\": [5, 19]}");
 
     assert(native_fighter_stage(3) == 1 && native_fighter_stage(5) == 2 && native_fighter_stage(19) == 2);
@@ -135,6 +124,40 @@ int main(void) {
     assert(played(3, 0, 2) == 40);
     assert(played(4, 0, 2) == 50); /* "active": 0 leaves it out */
     assert(played(5, 0, 2) == 0 && played(2, 0, 99) == 10);
+
+    /* the options: effects and sounds switch while the exe runs, each at its own start */
+    assert(played(6, 0, 0) == 0 && abs(mixed() - 500) < 20); /* a sound only: no images, a sound at half volume (22.05 -> 44.1 kHz) */
+    assert(abs(mixed() - 500) < 20 && abs(mixed() - 500) < 20 && mixed() == 0); /* 0.1 s is 3 vsyncs of 1470 frames, then it ends */
+    assert(native_effect_has_sound(6, 0, 0) && !native_effect_has_sound(2, 0, 0) && !native_effect_has_sound(7, 0, 0));
+    assert(native_effect_has_sound(8, 0, 0)); /* until it is read */
+    played(8, 0, 0);
+    assert(!native_effect_has_sound(8, 0, 0) && mixed() == 0); /* unreadable: the game's sound plays */
+    g_custom_sounds = 0;
+    assert(!native_effect_has_sound(6, 0, 0)); /* off: the game's hit sound plays */
+    assert(played(6, 0, 0) == 0 && mixed() == 0);
+    g_custom_sounds = 1;
+    g_custom_effects = 0;
+    assert(played(2, 0, 0) == 0 && played(3, 0, 2) == 0); /* the game's own images */
+    g_custom_effects = 1;
+    assert(played(2, 0, 0) == 10);
+
+    /* the sound library: a replaced battle sound plays the library's WAV at its volume, the rest are the game's */
+    assert(native_sound_replace(57) == 1 && abs(mixed() - 500) < 20);
+    assert(abs(mixed() - 500) < 20 && abs(mixed() - 500) < 20 && mixed() == 0);
+    assert(native_sound_replace(56) == 0 && native_sound_replace(0) == 0 && native_sound_replace(200) == 0); /* not replaced, nor a sound of the game */
+    /* a script mod names a library sound by id (0x100 and up): it plays, and is only silent with Custom sounds off */
+    assert(native_sound_id("punch") == 0x100 && native_sound_id("gone") == -1);
+    assert(native_sound_replace(58) == 0 && native_sound_replace(59) == 0 && native_sound_replace(60) == 0); /* no file, no such name, a bad name */
+    g_custom_sounds = 0;
+    assert(native_sound_replace(57) == 0 && mixed() == 0); /* off: the game's sound */
+    g_custom_sounds = 1;
+    g_render_sounds = 1;
+    assert(native_sound_replace(57) == 0); /* --render-sounds writes the game's own */
+    g_render_sounds = 0;
+    assert(native_sound_replace(57) == 1);
+    g_custom_sounds = 0;
+    assert(native_sound_replace(0x100) == 1); /* a script mod's sound is silent, the game has none in its place */
+    g_custom_sounds = 1;
     puts("ok");
     return 0;
 }

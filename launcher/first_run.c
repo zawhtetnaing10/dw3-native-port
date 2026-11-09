@@ -76,6 +76,9 @@ static int SDLCALL read_thread(void *unused)
 {
     (void)unused;
     const int result = native_extract(s_image, path_data(), progress);
+    if (result == E_NONE) {
+        sounds_render(); /* the viewer's original hit sounds, from the data just written */
+    }
     SDL_SetAtomicInt(&s_done, 1);
     return result;
 }
@@ -134,7 +137,6 @@ static void finish(void)
     if (result == E_NONE) {
         g_app.state = ST_READY;
         g_app.sel[SC_HOME] = 0;
-        options_load(); /* Flamedramon's model may be there now */
     } else if (result == E_CANCELLED) {
         g_app.state = ST_NO_GAME;
     } else {

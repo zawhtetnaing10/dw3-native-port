@@ -83,6 +83,27 @@ void binds_reset(void)
     SDL_memcpy(s_pad, DEFAULT_PAD, sizeof s_pad);
 }
 
+/* Cancel on B: Triangle (the game's cancel, bit 12) and Circle (13) trade keys and pad button; again, it undoes */
+void binds_swap_cancel(void)
+{
+    for (int i = 0; i < 2; i++) {
+        const int k = s_keys[12][i];
+        s_keys[12][i] = s_keys[13][i];
+        s_keys[13][i] = k;
+    }
+    const int p = s_pad[12];
+    s_pad[12] = s_pad[13];
+    s_pad[13] = p;
+    s_dirty[12] = s_dirty[13] = true;
+}
+
+bool binds_swapped(void)
+{
+    /* either half counts so that rebinding the other one doesn't hide it */
+    return (!SDL_memcmp(s_keys[12], DEFAULT_KEYS[13], sizeof s_keys[12]) && !SDL_memcmp(s_keys[13], DEFAULT_KEYS[12], sizeof s_keys[13])) ||
+           (s_pad[12] == DEFAULT_PAD[13] && s_pad[13] == DEFAULT_PAD[12]);
+}
+
 /* a button back at its default loses its lines, as the game writes only what differs */
 bool binds_save(void)
 {
@@ -252,6 +273,14 @@ int binds_selftest(void)
     bad += s_keys[B_CROSS][0] != 0 || s_keys[B_CROSS][1] != SDL_SCANCODE_SPACE || s_keys[B_CIRCLE][0] != SDL_SCANCODE_Z;
     set_button(B_CIRCLE, SDL_GAMEPAD_BUTTON_SOUTH);
     bad += s_pad[B_CROSS] != PAD_NONE || SDL_strcmp(bind_text(B_CIRCLE, 2) , "A") != 0 || source_from_name(source_name(PAD_LT)) != PAD_LT;
+    SDL_memcpy(s_keys, DEFAULT_KEYS, sizeof s_keys);
+    SDL_memcpy(s_pad, DEFAULT_PAD, sizeof s_pad);
+    binds_swap_cancel();
+    bad += !binds_swapped();
+    s_pad[B_CIRCLE] = PAD_NONE; /* a custom pad button must not hide the swapped keys */
+    bad += !binds_swapped();
+    s_keys[B_CIRCLE][0] = SDL_SCANCODE_Q; /* both halves customised: it works, it just can't be told */
+    bad += binds_swapped();
     binds_load();
     return bad;
 }

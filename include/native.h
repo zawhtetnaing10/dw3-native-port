@@ -27,6 +27,33 @@ void native_read_file(int fid, int sector, int count, void *dst);
 void native_wait_vblank(void);
 /* 0 for a vsync fast forward adds (the game's ticks between frames shown) */
 int native_real_vsync(void);
+int native_real_time(void); /* the vsyncs shown, as the game counts time (etc.c) */
+extern int g_menu_wrap; /* menu_wrap = 1: a menu's cursor goes round at its ends (mods.c; the menus' patches) */
+/* A list's cursor that went nowhere at its first or last row (old == now: the game's clamp held it)
+   goes to the other end. dir: -1 up, 1 down; last: the last row */
+static inline int native_wrap_list(int old, int now, int dir, int last) {
+    if (g_menu_wrap && old == now && last > 0) {
+        return dir < 0 && now == 0 ? last : dir > 0 && now == last ? 0 : now;
+    }
+    return now;
+}
+/* The same for a page of two columns (the item lists): from the top row up to the column's last row,
+   from its last row down to the top. Elsewhere the game's own move stands */
+static inline int native_wrap_grid(int old, int now, int first, int last, int dir) {
+    int col = (old - first) & 1, bottom = ((last - first) & 1) == col ? last : last - 1;
+
+    if (!g_menu_wrap) {
+        return now;
+    }
+    if (bottom < first) {
+        bottom = first;
+    }
+    if (dir < 0 && old - first < 2) {
+        return bottom;
+    }
+    return dir > 0 && old == bottom ? (first + col <= last ? first + col : first) : now;
+}
+extern int g_ff_menu_speed; /* ff_menu_speed = 1: a held button repeats at its normal pace in fast forward (pad/port.c) */
 
 /* Overlay variables back to their initial values: the mode overlays (sub 0)
    or the stages and WFIGHTMN/TS (sub 1) (platform/memory.c) */
@@ -71,6 +98,7 @@ extern const int NATIVE_EXTRA_PACKS[3][3]; /* their partners */
    greeting, 12-13 the word of the intro and the one replacing it; and the
    port's other texts: 14 fast travel's question */
 const void *native_packs_text(int language);
+void native_quit(void); /* the field menu's Quit: saves the options menu's changes, then exits as closing the window does */
 #define NATIVE_PACK_SCENE(pack) ((pack) >= 3 ? 1 : (pack))
 
 /* BladeGarurumon as a partner's Digimon: model 471 and the texts of its
@@ -84,41 +112,89 @@ const void *native_packs_text(int language);
 #define NATIVE_SOLAR_LASER 444 /* its signature: a technique past the game's 443 */
 extern int g_bladegarurumon;
 void native_bladegarurumon_setup(void);
-/* Flamedramon, the second extra form: the Armour Digimon of Digimon World 2, its
-   model made for this game (dw2-extractor, data/mods/7120.bin), DIGIMON_DATA[52]
-   made its own (native_flamedramon_setup), its own techniques 445-450 with Express
-   Claw the signature, learnt while g_flamedramon is on (stfgtrep/growth.c) */
-#define NATIVE_FLAMEDRAMON 472
-#define NATIVE_FLAMEDRAMON_DATA 52
-#define NATIVE_EXTRA_FORMS 2
-#define NATIVE_FLAMEDRAMON_FID 7120 /* its model, a file of data/mods (dw2-extractor/flame_dcb.py): without it the form isn't offered */
-#define NATIVE_FLAMEDRAMON_NAME 251 /* its name: a string past the game's 251 in the Digimon names */
-#define NATIVE_FLAMEDRAMON_TECH 445 /* its six techniques, the last the signature Express Claw (Fire Rocket and Knuckle Fire before it) */
-#define NATIVE_TECH_COUNT 451       /* TECHS: the game's 443, Solar Laser, Flamedramon's and its pair's */
-extern int g_flamedramon;
-/* Pair techniques (the Tag menu) past the game's one pairPartner/pairTech a form has: any number of pairs for a form. A row is the active form and the form the
-   other partner has (DIGIMON_DATA ids); the pair fuses into Flamedramon, which does one of its three signatures at random (wfightmn/menu.c).
-   NATIVE_FLAME_PAIR_TECH is only the cost of the fusion in the menu (both pay it) */
-#define NATIVE_FLAME_PAIR_TECH 451
-#define NATIVE_PAIR_A 259 /* ExVeemon */
-#define NATIVE_PAIR_B 5   /* Greymon */
-static const unsigned short NATIVE_PAIRS[][2] = {{NATIVE_PAIR_A, NATIVE_PAIR_B}, {NATIVE_PAIR_B, NATIVE_PAIR_A}};
-/* While the fusion's technique plays: the other partner's id (0 for no fusion). The fighter's own script 12 (the pair's DNA of the game, Paildramon's for
-   ExVeemon) is then played from a copy with the other partner and Flamedramon in place of its partner and DNA form, and one of Flamedramon's three
-   attacks (motions 50, 62, 63) in place of the DNA attack (56) at the random number RND (fightstg/battle_script.c) */
-extern int g_dna_other;
-short *native_dna_script(const short *pc, int other, unsigned rnd);
-static int __attribute__((unused)) native_pair_tech(int active, int partner) {
-    unsigned i;
-    if (g_flamedramon && native_file_exists(NATIVE_FLAMEDRAMON_FID)) {
-        for (i = 0; i < sizeof NATIVE_PAIRS / sizeof NATIVE_PAIRS[0]; i++) {
-            if (NATIVE_PAIRS[i][0] == active && NATIVE_PAIRS[i][1] == partner) {
-                return NATIVE_FLAME_PAIR_TECH;
-            }
-        }
-    }
-    return 0;
+/* Full EXP Share: battle-end eligibility and the option frozen for this report
+   (platform/mods.c; WFIGHTMN and STFGTREP patches). */
+extern int g_full_exp_share;
+extern int g_skip_press_start; /* skip_press_start = 1: the title has no PRESS START (STDWTITL menu.c) */
+extern int g_heal_on_levelup; /* heal_on_levelup = 1: a partner that levels up is healed (STFGTREP growth.c) */
+extern int g_save_anywhere;
+extern int g_save_from_menu;
+extern int g_full_exp_eligible[3];
+extern int g_full_exp_report;
+/* Digimon mods (platform/digimon_mods.c): a folder data/mods/digimon/<name>/digimon.json makes one more Digimon a partner can digivolve into
+   (Flamedramon is the first). Its model is the file FID of data/mods; the mod is on only while that file is there and "enabled" isn't 0.
+   A mod's id is its own (472 on, one number a mod, the number of its form in a save), and from it the rest follows: its DIGIMON_DATA entry
+   (55 + k, k = id - 472), its name's string (251 + k: nameId is a byte) and its seven techniques (445 + 7k: six of its own, the pair's
+   fusion last). Up to NATIVE_MAX_MODS at once; the fields are in the README's Digimon mods */
+#define NATIVE_MAX_MODS 4
+#define NATIVE_MOD_FIRST_ID 472
+#define NATIVE_MOD_DATA 55
+#define NATIVE_MOD_NAME 251
+#define NATIVE_MOD_TECH 445
+#define NATIVE_DATA_COUNT (NATIVE_MOD_DATA + NATIVE_MAX_MODS) /* DIGIMON_DATA: the game's 55, then the mods' */
+#define NATIVE_TECH_COUNT (NATIVE_MOD_TECH - 1 + 7 * NATIVE_MAX_MODS) /* TECHS: the game's 443, Solar Laser, then the mods' */
+#define NATIVE_EXTRA_FORMS (1 + NATIVE_MAX_MODS) /* BladeGarurumon and the mods' */
+typedef struct NativeModTech {
+    int from, mp, power, element_power, element, script; /* the technique it is made from (sprites, sounds), its own cost, power, element, script (0: the model's) */
+    char name[24];
+    char help[5][100]; /* English, French, Italian, German, Spanish: no accents, the glyphs of those are the game's to find */
+} NativeModTech;
+typedef struct NativeMod {
+    int id, slot, name_id, tech, fid;
+    int like;        /* a model whose partner record gives the cameras and face (ExVeemon's, 259) */
+    int template;    /* the DIGIMON_DATA entry it starts from: the growth tables of that Digimon */
+    int hp_permille, mp_permille;
+    int signatures;  /* how many of its last skills are signatures */
+    int tired;       /* its eyes stay shut in the weak idle */
+    int portrait_dz; /* the portrait cameras move this far along the facing (the model's head is level where the record's leans back) */
+    int subs[3];     /* its skeleton, motions and effects in its file */
+    int stats[5], resists[7], status[5], learn[6], known[5];
+    int needs[4];    /* learnt with DIGIMON_DATA entries needs[0] and needs[2] (1-based) at levels needs[1] and needs[3] */
+    NativeModTech techs[6];
+    int pair[2], pair_element, pair_element_power, pair_shift; /* a pair that fuses into it (none while 0): both ids, the fusion's element, how much farther the second flies */
+    int dna_scripts[3], dna_motions[3]; /* the fusion's finale: a script of its file and its motion, one of three at random */
+    int face_n;
+    unsigned char face[20]; /* its eyes (the record's face table: part, frames) when the record's own would paint over it */
+    int fx[16][2], fx_n; /* effect id -> a file of data/mods, for its techniques' own models */
+    char name[24], folder[40];
+} NativeMod;
+/* What the loader made of each folder of data/mods/digimon, in the order of their names (native_mods_report) */
+enum { NATIVE_MOD_LOADED, NATIVE_MOD_DISABLED, NATIVE_MOD_REJECTED, NATIVE_MOD_SKIPPED /* no digimon.json in it */ };
+#define NATIVE_MOD_REPORTS 256 /* the report's room: the folders past it are read all the same, only left out of it (dropped) */
+typedef struct NativeModReport {
+    char folder[64], name[24];
+    int id, fid, status;
+    char reason[192];   /* why it is not loaded: the first thing wrong with it, or what it clashes with */
+    char warnings[192]; /* what is unusual in it, separated by "; " */
+} NativeModReport;
+#define NATIVE_MOD_SCHEMA 1 /* the manifest's "schema_version" this port reads; a manifest without one is 1 */
+void native_mods_load(void);
+const NativeModReport *native_mods_report(int *count, int *dropped);
+const NativeMod *native_mod_at(int k);       /* mod k (id - 472) or NULL */
+const NativeMod *native_mod_by_id(int id);   /* by form id, or NULL */
+const NativeMod *native_mod_for_effect(int id, int *fid); /* the mod with an effect model of its own */
+void native_mods_setup(void);                /* the game's main/game/digimon.c (patched): DIGIMON_DATA and TECHS */
+/* an extra form's id by position (0 is BladeGarurumon, then the mods'), 0 where there is none */
+static int __attribute__((unused)) native_form_id(int i) {
+    const NativeMod *m = i > 0 ? native_mod_at(i - 1) : 0;
+    return i == 0 ? NATIVE_BLADEGARURUMON : m != 0 ? m->id : 0;
 }
+/* the DIGIMON_DATA entry of an extra form's id, or -1 */
+static int __attribute__((unused)) native_form_slot(int id) {
+    const NativeMod *m = id == NATIVE_BLADEGARURUMON ? 0 : native_mod_by_id(id);
+    return id == NATIVE_BLADEGARURUMON ? NATIVE_BLADEGARURUMON_DATA : m != 0 ? m->slot : -1;
+}
+/* how many of a form's last skills are signatures (SKILL_LAST) */
+static int __attribute__((unused)) native_form_signatures(int id) {
+    const NativeMod *m = native_mod_by_id(id);
+    return m != 0 ? m->signatures : 1;
+}
+/* Pair techniques (the Tag menu) past the game's one pairPartner/pairTech a form has. A pair that a mod fuses into (its "pair") gets
+   the mod's fusion technique, tech + 6, in the menu (both pay it) */
+extern int g_dna_other;
+int native_dna_begin(int pair_tech, int active); /* the other partner's id when PAIR_TECH is a fusion (g_dna_other's), else 0 */
+short *native_dna_script(const short *pc, int other, unsigned rnd);
+int native_pair_tech(int active, int partner);
 /* an effect model of the port's (Flaming Rocket's rocket, 450, and the dome of flames, 451: data/mods/7101.bin, 7102.bin, made by
    dw2-extractor) as FIGHTSTG_effectModels' entry: 1 with its model's file and index and its motions' (fightstg/effect_model.c) */
 int native_effect_model(int id, int *file, int *motionFile);
@@ -129,12 +205,6 @@ void native_effect_scroll_begin(int id);
 void native_effect_scroll(int id, int x, int y);
 void native_vram_roll(int x, int y, int w, int h, int dx);
 extern int g_give_form; /* --give ID: the form is given to every partner on a load (a development aid) */
-void native_flamedramon_setup(void);
-static const unsigned short NATIVE_FORM_IDS[NATIVE_EXTRA_FORMS] = {NATIVE_BLADEGARURUMON, NATIVE_FLAMEDRAMON};
-/* the DIGIMON_DATA entry of an extra form's id, or -1 */
-static int __attribute__((unused)) native_form_slot(int id) {
-    return id == NATIVE_BLADEGARURUMON ? NATIVE_BLADEGARURUMON_DATA : id == NATIVE_FLAMEDRAMON ? NATIVE_FLAMEDRAMON_DATA : -1;
-}
 /* listPartnerEntries into room for max ids, BladeGarurumon included when there is */
 int native_list_partner_entries(int partner, unsigned short *out, int max);
 
@@ -180,6 +250,21 @@ extern int g_battle_shadows;
    effect's point). Returns its images, -1 without, and their ticks. STAGE is
    native_fighter_stage's: without images, the nearest lower stage's play */
 int native_effect_images(int effect, int critical, int stage, int *ticks);
+/* --render-sounds (platform/soundrender.c), run by main.c's boot after it starts the sound: the battle sound index I of
+   the list or -1, a sound's capture (begin, a frame of the SPU's mix at a time while 1, end writes its WAV) and done exits */
+extern int g_render_sounds;
+int native_render_next(int i);
+void native_render_begin(int index);
+int native_render_frame(void);
+void native_render_end(int index);
+void native_render_done(void);
+/* 1 when the effect (for that critical hit and stage) has a sound of its own that plays (g_custom_sounds on): the attack script
+   leaves the game's hit sound out then */
+int native_effect_has_sound(int effect, int critical, int stage);
+/* the sound library's WAV plays in place of the game's battle sound INDEX (data/mods/sounds): 1 if so, and the game's is left out */
+int native_sound_replace(int index);
+/* the words of fighter FIGHTER's battle script INDEX from data/mods/scripts when a mod has a valid one and Custom scripts is on, else NULL */
+const short *native_script_mod(int fighter, int index);
 /* FIGHTER's stage in data/mods/effects/stages.json: 1 rookie, 2 champion,
    3 ultimate, 4 mega, 0 for one it doesn't list */
 int native_fighter_stage(int fighter);

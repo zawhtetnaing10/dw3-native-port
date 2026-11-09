@@ -12,15 +12,14 @@ static const Row HOME_NEWS[] = {ACT(S_PLAY), ACT(S_SETTINGS), ACT(S_SAVES), ACT(
 static const Row SAVES[] = {ACT(S_EXPORT), ACT(S_IMPORT), ACT(S_UNDO), ACT(S_SV_FOLDER), ACT(S_BACK), {R_END}};
 static const Row FIRST_RUN[] = {ACT(S_BROWSE), {R_LANGUAGE}, {R_END}};
 static const Row TOOLS[] = {ACT(S_VIEWER), ACT(S_EDITOR), ACT(S_FOLDER), ACT(S_LOG), ACT(S_CHECK), ACT(S_CREDITS), ACT(S_BACK), {R_END}};
-static const Row TOOLS_NEWS[] = {ACT(S_VIEWER), ACT(S_EDITOR), ACT(S_FOLDER), ACT(S_LOG), ACT(S_CHECK), ACT(S_CREDITS), ACT(S_T_UPDATE), ACT(S_BACK), {R_END}};
 /* the Input tab's buttons in the order of the game's Controls page */
-static const Row TABS[4][24] = {
-    {OPT(O_FPS), OPT(O_FULLSCREEN), OPT(O_WINDOW), OPT(O_WIDESCREEN), OPT(O_VSYNC), OPT(O_MOVIES), ACT(S_RESET), ACT(S_BACK), {R_END}},
+static const Row TABS[4][27] = {
+    {OPT(O_FPS), OPT(O_FULLSCREEN), OPT(O_WINDOW), OPT(O_WIDESCREEN), OPT(O_VSYNC), OPT(O_MOVIES), OPT(O_INACTIVE), ACT(S_RESET), ACT(S_BACK), {R_END}},
     {OPT(O_RESOLUTION), OPT(O_PERSPECTIVE), OPT(O_SMOOTH_3D), OPT(O_TRUE_COLOR), OPT(O_DITHER), OPT(O_SOFT_SHADOWS), OPT(O_BATTLE_SHADOWS), OPT(O_BATTLE_SKY), ACT(S_RESET), ACT(S_BACK), {R_END}},
-    {OPT(O_ICONS), OPT(O_RUMBLE), OPT(O_DEADZONE), {R_HEADING, S_BUTTONS},
+    {OPT(O_ICONS), OPT(O_RUMBLE), OPT(O_DEADZONE), OPT(O_FF_MENUS), OPT(O_SKIP_START), OPT(O_MENU_WRAP), ACT(S_SWAP), {R_HEADING, S_BUTTONS},
      BIND(14), BIND(13), BIND(15), BIND(12), BIND(10), BIND(11), BIND(8), BIND(9), BIND(1), BIND(2), BIND(3), BIND(0), BIND(4), BIND(6), BIND(7), BIND(5),
      ACT(S_RESET), ACT(S_BACK), {R_END}},
-    {OPT(O_FAST_TEXT), OPT(O_FAST_TRAVEL), OPT(O_OBJECTIVE), OPT(O_JOURNAL), OPT(O_PACKS), {R_HEADING, S_PLAYABLE}, OPT(O_BLADEGARURUMON), OPT(O_FLAMEDRAMON), ACT(S_RESET), ACT(S_BACK), {R_END}},
+    {OPT(O_FAST_TEXT), OPT(O_FAST_TRAVEL), OPT(O_OBJECTIVE), OPT(O_JOURNAL), OPT(O_PACKS), OPT(O_FULL_EXP_SHARE), OPT(O_HEAL_LEVELUP), OPT(O_SAVE_ANYWHERE), OPT(O_CUSTOM_EFFECTS), OPT(O_CUSTOM_SOUNDS), OPT(O_CUSTOM_SCRIPTS), {R_HEADING, S_PLAYABLE}, OPT(O_BLADEGARURUMON), ACT(S_RESET), ACT(S_BACK), {R_END}},
 };
 static const short TAB_NAME[4] = {S_DISPLAY, S_GRAPHICS, S_INPUT, S_MODS};
 const Lang *const LANG_TABLE[LANGS] = {&LANG_EN, &LANG_ES, &LANG_FR, &LANG_DE, &LANG_IT};
@@ -37,15 +36,32 @@ App g_app;
 
 bool first_run_screen(void) { return s_screen == SC_HOME && s_state != ST_READY; }
 
+int row_tool(const Row *r)
+{
+    return r->kind != R_ACTION ? -1 : r->id == S_VIEWER ? 0 : r->id == S_EDITOR ? 1 : -1;
+}
+
+static void update_label(int tool, char *out, int size)
+{
+    SDL_snprintf(out, size, "%s %s", L->s[S_T_UPDATE], tool_update_tag(tool));
+}
+
+SDL_Rect update_button(int tool)
+{
+    char label[64];
+    const SDL_Rect a = list_rect();
+    update_label(tool, label, sizeof label);
+    const int w = text_width(label, 1) + 12;
+    return (SDL_Rect){a.x + a.w - 6 - w, 0, w, ROW_H - 2};
+}
+
 const Row *rows(void)
 {
     if (s_screen == SC_SETTINGS) {
         return TABS[s_tab];
     }
     if (s_screen == SC_TOOLS) {
-        const Row *r = tool_update_index() >= 0 ? TOOLS_NEWS : TOOLS;
-        s_sel[SC_TOOLS] = SDL_min(s_sel[SC_TOOLS], row_count(r) - 1); /* the update's row goes when it's done */
-        return r;
+        return TOOLS;
     }
     if (s_screen == SC_SAVES) {
         return SAVES;
@@ -75,6 +91,10 @@ SDL_Rect list_rect(void)
     }
     return (SDL_Rect){PAD, s_screen == SC_SAVES ? 86 : 54, s_screen == SC_HOME ? 178 : SCREEN_W - 2 * PAD, list_rows(rows()) * ROW_H + 8};
 }
+
+int list_in_sight(void) { return ROWS_IN_SIGHT; }
+
+int list_inset(void) { return s_screen == SC_SETTINGS && list_rows(rows()) > ROWS_IN_SIGHT ? 6 : 0; }
 
 int list_first(void)
 {
@@ -120,18 +140,19 @@ static void draw_heading(const Row *row, int y)
         text(bind_column(0), y, 1, C_GOLD, L->s[S_KEYBOARD]);
         text(bind_column(2), y, 1, C_GOLD, L->s[S_GAMEPAD]);
     } else {
-        fill(a.x + 12 + w, y + 8, a.w - 18 - w, 1, C_RULE);
+        fill(a.x + 12 + w, y + 8, a.w - 18 - w - list_inset(), 1, C_RULE);
     }
 }
 
-/* a thin bar on the panel's edge, when the list is longer than it */
+/* a bar on the panel's edge, when the list is longer than it */
 static void draw_scrollbar(int n, int first)
 {
     const SDL_Rect a = list_rect();
     if (n > ROWS_IN_SIGHT) {
         const int track = a.h - 4, thumb = track * ROWS_IN_SIGHT / n;
-        fill(a.x + a.w - 4, a.y + 2, 2, track, C_RULE);
-        fill(a.x + a.w - 4, a.y + 2 + (track - thumb) * first / (n - ROWS_IN_SIGHT), 2, thumb, C_GOLD);
+        fill(a.x + a.w - 7, a.y + 2, 4, track, scrollbar_state() ? C_EDGE : C_RULE);
+        const int state = scrollbar_state(); /* as a web page's: lit under the pointer, brightest held */
+        fill(a.x + a.w - 7, a.y + 2 + (track - thumb) * first / (n - ROWS_IN_SIGHT), 4, thumb, state == 2 ? C_GOLD_HI : state == 1 ? C_GOLD : C_SOFT);
     }
 }
 
@@ -143,7 +164,7 @@ static void draw_list(void)
     const int first = list_first(), n = list_rows(r), end = s_screen == SC_SETTINGS ? SDL_min(n, first + ROWS_IN_SIGHT) : n;
     for (int i = first; i < end; i++) {
         const int y = a.y + 4 + (i - first) * ROW_H;
-        const bool sel = i == s_sel[s_screen];
+        const bool sel = i == s_sel[s_screen] && !g_app.tabfocus;
         if (r[i].kind == R_HEADING) {
             draw_heading(&r[i], y);
             continue;
@@ -156,20 +177,30 @@ static void draw_list(void)
             draw_bind(&r[i], y, sel);
             continue;
         }
-        if (s_screen == SC_TOOLS && (r[i].id == S_VIEWER || r[i].id == S_EDITOR)) {
+        const int tool = row_tool(&r[i]);
+        if (tool >= 0) {
             char value[64];
-            tool_value(r[i].id == S_EDITOR, value, sizeof value);
-            text_right(a.x + a.w - 8, y, sel ? C_GOLD : C_SOFT, value);
-        }
-        if (r[i].id == S_T_UPDATE) {
-            char value[96];
-            tool_update_value(value, sizeof value);
-            text_right(a.x + a.w - 8, y, C_GOLD, value);
+            int right = a.x + a.w - 8 - list_inset();
+            const bool on = sel && g_app.btn && tool_update_has(tool);
+            if (tool_update_has(tool)) {
+                char label[64];
+                const SDL_Rect b = update_button(tool);
+                update_label(tool, label, sizeof label);
+                fill(b.x, y + 1, b.w, ROW_H - 2, C_EDGE);
+                fill(b.x + 1, y + 2, b.w - 2, ROW_H - 4, on ? C_PANEL : C_BG);
+                text(b.x + 6, y, 1, on ? C_GOLD : C_TEXT, label);
+                right = b.x - 8;
+            }
+            tool_value(tool, value, sizeof value);
+            text_right(right, y, sel && !on ? C_GOLD : C_SOFT, value);
         }
         text(a.x + 13, y, 1, sel ? C_GOLD : C_TEXT, r[i].kind == R_OPTION ? L->option[r[i].id].name : L->s[r[i].id]);
+        if (r[i].kind == R_ACTION && r[i].id == S_SWAP) { /* on or off, so it shows it took */
+            text_right(a.x + a.w - 12 - list_inset(), y, binds_swapped() ? C_GOLD : C_SOFT, L->s[binds_swapped() ? S_ON : S_OFF]);
+        }
         if (r[i].kind == R_OPTION) {
             char value[32];
-            const int right = a.x + a.w - (sel ? 13 : 8);
+            const int right = a.x + a.w - (sel ? 13 : 8) - list_inset();
             option_value(r[i].id, L, value, sizeof value);
             text_right(right, y, option_is_off(r[i].id) ? C_SOFT : C_TEXT, value);
             if (sel) {
@@ -190,6 +221,7 @@ static void draw_description(void)
                   : r->kind == R_OPTION ? L->option[r->id].desc
                   : r->kind == R_LANGUAGE ? L->s[S_LANGUAGE_D]
                   : r->kind == R_BIND ? L->s[S_BIND_D]
+                  : row_tool(r) >= 0 && g_app.btn && tool_update_has(row_tool(r)) ? L->s[S_T_UPDATE_D]
                   : L->s[r->id + 1];
     const bool home = s_screen == SC_HOME; /* two lines under the team, with room around it */
     const int y = home ? 204 : DESC_Y, h = home ? 28 : DESC_H;
@@ -211,7 +243,7 @@ static void draw_tabs(void)
     for (int i = 0; i < 4; i++) {
         const SDL_Rect t = tab_rect(i);
         const bool sel = i == s_tab;
-        fill(t.x, t.y, t.w, t.h, C_EDGE);
+        fill(t.x, t.y, t.w, t.h, sel && g_app.tabfocus ? C_GOLD : C_EDGE);
         fill(t.x + 1, t.y + 1, t.w - 2, t.h - 1, sel ? C_PANEL : C_BG);
         text(t.x + 8, t.y + 2, 1, sel ? C_GOLD : C_SOFT, L->s[TAB_NAME[i]]);
     }
